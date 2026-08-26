@@ -35,7 +35,7 @@ NetRiskScan provides diagnostic network intelligence. Results should not be
 treated as proof of malicious activity or used as the sole basis for legal,
 employment, credit, identity, or other high-impact decisions.
 
-Learn more: https://github.com/netriskscan/netriskscan-cli
+Learn more: https://github.com/TeamQQ/netriskscan-cli
 `,
   );
 

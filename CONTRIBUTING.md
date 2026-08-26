@@ -22,7 +22,7 @@ please open an issue describing the use case instead of working around it client
 ## Development setup
 
 ```bash
-git clone https://github.com/netriskscan/netriskscan-cli.git
+git clone https://github.com/TeamQQ/netriskscan-cli.git
 cd netriskscan-cli
 npm install
 ```

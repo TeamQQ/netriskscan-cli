@@ -1,6 +1,6 @@
 {
   "name": "netriskscan-cli",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Official command-line client and SDK for the NetRiskScan Developer API - query IP risk, network intelligence and reputation data from your terminal.",
   "keywords": [
     "netriskscan",
@@ -13,11 +13,11 @@
     "network-intelligence",
     "threat-intelligence"
   ],
-  "homepage": "https://github.com/netriskscan/netriskscan-cli#readme",
-  "bugs": "https://github.com/netriskscan/netriskscan-cli/issues",
+  "homepage": "https://github.com/TeamQQ/netriskscan-cli#readme",
+  "bugs": "https://github.com/TeamQQ/netriskscan-cli/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/netriskscan/netriskscan-cli.git"
+    "url": "git+https://github.com/TeamQQ/netriskscan-cli.git"
   },
   "license": "MIT",
   "author": "NetRiskScan",

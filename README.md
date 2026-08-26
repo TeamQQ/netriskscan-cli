@@ -4,7 +4,7 @@ Query IP risk, network intelligence and reputation data directly from your termi
 
 Powered by the [NetRiskScan Developer API](#developer-api).
 
-[![CI](https://github.com/netriskscan/netriskscan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/netriskscan/netriskscan-cli/actions/workflows/ci.yml)
+[![CI](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/netriskscan-cli.svg)](https://www.npmjs.com/package/netriskscan-cli)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -488,11 +488,8 @@ only available through the Developer Dashboard.
 
 `/v1/*` never accepts query string parameters - all inputs are path parameters.
 
-For the full protocol reference (auth, headers, error codes, code samples in
-JavaScript/Python/cURL), see [`doc/NetRiskScan_Developer_API_Reference.md`](doc/NetRiskScan_Developer_API_Reference.md)
-in this repo, and the official
-[Methodology](https://www.netriskscan.com/methodology.html) page for how the
-NetRiskScan Index itself is computed (this project does not - and will not -
+See the official [Methodology](https://www.netriskscan.com/methodology.html) page for
+how the NetRiskScan Index itself is computed (this project does not - and will not -
 reimplement that logic client-side).
 
 ## Contributing
