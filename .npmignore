@@ -1,0 +1,12 @@
+src/
+tests/
+examples/
+doc/
+.github/
+*.config.ts
+*.config.js
+tsconfig.json
+eslint.config.js
+.prettierrc*
+.prettierignore
+.gitignore

@@ -1,0 +1,75 @@
+{
+  "name": "netriskscan-cli",
+  "version": "0.1.0",
+  "description": "Official command-line client and SDK for the NetRiskScan Developer API - query IP risk, network intelligence and reputation data from your terminal.",
+  "keywords": [
+    "netriskscan",
+    "ip",
+    "ip-risk",
+    "security",
+    "cli",
+    "vpn-detection",
+    "proxy-detection",
+    "network-intelligence",
+    "threat-intelligence"
+  ],
+  "homepage": "https://github.com/netriskscan/netriskscan-cli#readme",
+  "bugs": "https://github.com/netriskscan/netriskscan-cli/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/netriskscan/netriskscan-cli.git"
+  },
+  "license": "MIT",
+  "author": "NetRiskScan",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "netriskscan": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "ora": "^8.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/node": "^20.14.15",
+    "eslint": "^9.9.1",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3",
+    "tsup": "^8.2.4",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.3.0",
+    "vitest": "^2.0.5"
+  }
+}
