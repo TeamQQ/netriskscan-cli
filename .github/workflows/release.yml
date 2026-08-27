@@ -2,22 +2,23 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
   id-token: write
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
 
@@ -28,4 +29,10 @@ jobs:
       - run: npm run build
 
       - run: npm install -g npm@latest
-      - run: npm publish --provenance --access public
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # actions/setup-node writes a placeholder npm auth token that can shadow
+          # OIDC trusted publishing (actions/setup-node#1440); clearing it forces
+          # npm to use the OIDC id-token instead.
+          NODE_AUTH_TOKEN: ""
