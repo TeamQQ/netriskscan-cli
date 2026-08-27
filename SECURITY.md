@@ -17,7 +17,7 @@ A `requestId` (from a CLI error message, `--verbose` output, or the `X-Request-I
 
 If you believe a NetRiskScan API key has been leaked (committed to a public repo, printed
 in a CI log, pasted somewhere public, etc.), **do not wait for a response here** - go
-straight to the [NetRiskScan Developer Dashboard](https://www.netriskscan.com/) and:
+straight to the [NetRiskScan Developer Dashboard](https://www.netriskscan.com) and:
 
 1. Open **API Keys**
 2. **Revoke** or **rotate** the affected key immediately

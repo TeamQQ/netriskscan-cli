@@ -1,10 +1,14 @@
 # NetRiskScan CLI
 
-IP reputation and network intelligence directly from your terminal.
+The official command-line client and TypeScript SDK for [NetRiskScan](https://www.netriskscan.com) -
+IP reputation, risk assessment, and network intelligence directly from your terminal.
 
 [![CI](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/netriskscan-cli.svg)](https://www.npmjs.com/package/netriskscan-cli)
+[![Website](https://img.shields.io/badge/website-netriskscan.com-informational)](https://www.netriskscan.com)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+[Website](https://www.netriskscan.com) · [npm](https://www.npmjs.com/package/netriskscan-cli) · [Developer API](#developer-api) · [Official resources](#official-resources)
 
 ```bash
 npx netriskscan-cli check 17.241.200.160
@@ -37,7 +41,7 @@ Abuse             No
 Request ID        req_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Explore
-Web               https://netriskscan.com
+Web               https://www.netriskscan.com
 GitHub            https://github.com/TeamQQ/netriskscan-cli
 ```
 
@@ -88,15 +92,19 @@ Powered by the [NetRiskScan Developer API](#developer-api).
 - [SDK usage](#sdk-usage)
 - [Security](#security)
 - [Developer API](#developer-api)
+- [Official resources](#official-resources)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Introduction
 
-`netriskscan-cli` is the official command-line client (and thin SDK) for the
-[NetRiskScan](https://www.netriskscan.com) Developer API - an automated IP risk and
-network intelligence lookup service. Give it an IP address, get back a machine-readable
-reputation score, network attribution, and risk signals.
+`netriskscan-cli` is the official command-line client and thin TypeScript SDK for
+[NetRiskScan](https://www.netriskscan.com), an IP reputation and network intelligence
+service.
+
+It connects to the NetRiskScan Developer API and returns machine-readable IP reputation
+scores, network attribution, and risk signals. Give it an IP address, get back a result
+you can pipe, gate on, or store.
 
 This is a read-only diagnostic tool. It does not make decisions for you, and the CLI
 never recomputes or approximates a risk score client-side - the `risk.index` returned by
@@ -540,6 +548,15 @@ only available through the Developer Dashboard.
 See the official [Methodology](https://www.netriskscan.com/methodology.html) page for
 how the NetRiskScan Index itself is computed (this project does not - and will not -
 reimplement that logic client-side).
+
+## Official resources
+
+- [NetRiskScan](https://www.netriskscan.com) - web-based IP reputation and network
+  intelligence
+- [NetRiskScan methodology](https://www.netriskscan.com/methodology.html) - how the
+  NetRiskScan Index and assessment model work
+- [netriskscan-cli on npm](https://www.npmjs.com/package/netriskscan-cli)
+- [GitHub repository](https://github.com/TeamQQ/netriskscan-cli)
 
 ## Contributing
 

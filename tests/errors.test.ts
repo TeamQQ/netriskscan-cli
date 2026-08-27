@@ -22,7 +22,7 @@ describe("printConfigError", () => {
     );
 
     expect(out).toContain("Get a free API key");
-    expect(out).toContain("https://netriskscan.com");
+    expect(out).toContain("https://www.netriskscan.com");
   });
 
   it("does not append the API key CTA for an unrelated config error", () => {

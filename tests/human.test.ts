@@ -100,7 +100,7 @@ describe("Explore footer", () => {
     const out = render(response());
 
     expect(out).toContain("Explore");
-    expect(out).toContain("Web               https://netriskscan.com");
+    expect(out).toContain("Web               https://www.netriskscan.com");
     expect(out).toContain("GitHub            https://github.com/TeamQQ/netriskscan-cli");
     expect(out.indexOf("Request ID")).toBeLessThan(out.indexOf("Explore"));
   });
