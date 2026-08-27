@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.1.0...v1.2.0) (2026-08-27)
+
+
+### Features
+
+* **check:** add Explore footer and API key signup CTA ([dc68f27](https://github.com/TeamQQ/netriskscan-cli/commit/dc68f27b3c3c477e1dc8823a49358348c31869de))
+
 # [1.1.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.0.0...v1.1.0) (2026-08-27)
 
 

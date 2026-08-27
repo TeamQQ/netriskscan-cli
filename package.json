@@ -1,6 +1,6 @@
 {
   "name": "netriskscan-cli",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Official command-line client and SDK for the NetRiskScan Developer API - query IP risk, network intelligence and reputation data from your terminal.",
   "keywords": [
     "netriskscan",
