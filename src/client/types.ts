@@ -17,6 +17,22 @@ export interface IpRiskResponse {
   };
   network: {
     type: string | null;
+    /**
+     * What this network is for - `search_crawler`, `public_dns_resolver`, `cdn_edge`, ...
+     *
+     * Absent (key omitted) unless NetRiskScan holds its own record covering the address, so this must be
+     * read defensively: older servers never send it. Deliberately `string` and not a union - the server
+     * adds values as official sources are onboarded, and an unknown one must render, not throw.
+     */
+    profile?: string | null;
+    /**
+     * The specific service - `Applebot`, `Googlebot`, `Google Public DNS`. Absent unless matched.
+     *
+     * Display text, not an identifier: it is the registered source's name and can be reworded. Branch on
+     * {@link profile} instead. A value here means the address was found in a range list the operator
+     * itself publishes - never that its ASN merely looked like a crawler's.
+     */
+    service?: string | null;
     connectionType: string | null;
     asn: string | null;
     organization: string | null;

@@ -40,6 +40,16 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
 
   lines.push(chalk.bold("Network"));
   lines.push(row("Type", formatNullable(data.network.type)));
+  // Omitted entirely when absent, unlike the fields around them, which render "N/A". Those describe every
+  // address, so a missing one is worth showing as missing; these two exist only for the minority of
+  // addresses NetRiskScan holds a first-party record for, and printing "Profile  N/A" on every residential
+  // lookup would be noise rather than information.
+  if (data.network.profile) {
+    lines.push(row("Profile", data.network.profile));
+  }
+  if (data.network.service) {
+    lines.push(row("Service", data.network.service));
+  }
   lines.push(row("Connection", formatNullable(data.network.connectionType)));
   lines.push(row("ASN", formatNullable(data.network.asn)));
   lines.push(row("Organization", formatNullable(data.network.organization)));
