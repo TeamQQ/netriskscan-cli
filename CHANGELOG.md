@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.0.0...v1.1.0) (2026-08-27)
+
+
+### Features
+
+* **check:** show Profile and Service for known infrastructure ([f0e84a2](https://github.com/TeamQQ/netriskscan-cli/commit/f0e84a2953a6f77ac23ee7f677b8b7919a31bb5a))
+
 # Changelog
 
 All notable changes to this project are documented in this file.
