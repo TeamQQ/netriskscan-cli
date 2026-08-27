@@ -1,29 +1,75 @@
 # NetRiskScan CLI
 
-Query IP risk, network intelligence and reputation data directly from your terminal.
-
-Powered by the [NetRiskScan Developer API](#developer-api).
+IP reputation and network intelligence directly from your terminal.
 
 [![CI](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/netriskscan-cli.svg)](https://www.npmjs.com/package/netriskscan-cli)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ```bash
-npm install -g netriskscan-cli
+npx netriskscan-cli check 17.241.200.160
 ```
 
-```bash
-export NETRISKSCAN_API_KEY="nrs_live_xxx"
+```text
+NetRiskScan
 
-netriskscan check 1.1.1.1
+IP                17.241.200.160
+Index             97
+Band              excellent
+Assessment        complete
+
+Network
+Type              public_infrastructure
+Profile           search_crawler
+Service           Applebot
+Connection        direct
+ASN               AS714
+Organization      Apple Inc.
+
+Signals
+Proxy             No
+VPN               No
+Tor               No
+Datacenter        No
+Scanner           Unknown
+Abuse             No
+
+Request ID        req_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+Explore
+Web               https://netriskscan.com
+GitHub            https://github.com/TeamQQ/netriskscan-cli
 ```
+
+Example output - actual values come from the live API and can change as reputation and
+threat data changes. Requires an API key (see [Getting an API key](#getting-an-api-key));
+the free plan needs no credit card.
+
+## Why NetRiskScan?
+
+- Known infrastructure identification for services such as search crawlers and public
+  infrastructure, instead of treating every address as a generic business or datacenter IP
+- Proxy, VPN, Tor, abuse, blacklist and threat signals
+- One normalized NetRiskScan Index instead of raw provider scores
+- `unknown` and `not applicable` states are preserved, never collapsed into "false"
+- Human-readable CLI output plus JSON / JSONL for scripts, batches and CI
+
+NetRiskScan can identify known infrastructure such as search crawlers, public DNS
+resolvers and other published infrastructure, instead of treating every address as a
+generic business or datacenter IP. Known infrastructure does not automatically mean
+safe - proxy, VPN, Tor, abuse and threat signals are still evaluated separately on
+every address. NetRiskScan normalizes multiple categories of evidence into one
+consistent assessment rather than exposing a single provider's raw score.
 
 > NetRiskScan provides diagnostic network intelligence. Results should not be treated as
 > proof of malicious activity and should not be used as the sole basis for legal,
 > employment, credit, identity, or other high-impact decisions.
 
+Powered by the [NetRiskScan Developer API](#developer-api).
+
 ## Table of contents
 
+- [Why NetRiskScan?](#why-netriskscan)
 - [Introduction](#introduction)
 - [Features](#features)
 - [Installation](#installation)
@@ -70,14 +116,17 @@ the server is always the single source of truth.
 
 ## Installation
 
-```bash
-npm install -g netriskscan-cli
-```
-
-Or run it without a global install:
+Run it without installing anything:
 
 ```bash
 npx netriskscan-cli check 1.1.1.1
+```
+
+Or install it globally:
+
+```bash
+npm install -g netriskscan-cli
+netriskscan check 1.1.1.1
 ```
 
 Requires Node.js >= 20.

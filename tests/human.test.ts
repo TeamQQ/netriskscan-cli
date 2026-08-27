@@ -92,6 +92,20 @@ describe("service identity rows", () => {
   });
 });
 
+describe("Explore footer", () => {
+  /** The check command's human-readable output ends with a project navigation footer. This must stay
+   * confined to renderCheckResult - printJson/printJsonLine (used by --json/--jsonl) are separate
+   * functions that never call this one, so machine-readable modes can't pick it up by accident. */
+  it("prints Web and GitHub links after Request ID", () => {
+    const out = render(response());
+
+    expect(out).toContain("Explore");
+    expect(out).toContain("Web               https://netriskscan.com");
+    expect(out).toContain("GitHub            https://github.com/TeamQQ/netriskscan-cli");
+    expect(out.indexOf("Request ID")).toBeLessThan(out.indexOf("Explore"));
+  });
+});
+
 describe("signals stay tri-state", () => {
   /** A crawler identity says nothing about datacenter hosting. When no source checked, the row must read
    * Unknown — collapsing it to "No" would report an unchecked signal as a confirmed absence. */

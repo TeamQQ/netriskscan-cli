@@ -65,6 +65,11 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
   lines.push("");
 
   lines.push(row("Request ID", data.requestId));
+  lines.push("");
+
+  lines.push(chalk.bold("Explore"));
+  lines.push(row("Web", "https://netriskscan.com"));
+  lines.push(row("GitHub", "https://github.com/TeamQQ/netriskscan-cli"));
 
   process.stdout.write(`${lines.join("\n")}\n`);
 }

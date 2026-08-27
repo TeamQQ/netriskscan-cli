@@ -3,6 +3,9 @@ import type { NetRiskScanApiError, NetRiskScanConfigError, NetRiskScanNetworkErr
 
 export function printConfigError(err: NetRiskScanConfigError): void {
   process.stderr.write(`Error: ${err.message}\n`);
+  if (err.message.includes("API key")) {
+    process.stderr.write("\nGet a free API key (no credit card required): https://netriskscan.com\n");
+  }
 }
 
 const LABEL_WIDTH = 11;
