@@ -5,10 +5,17 @@ export {
   NetRiskScanApiError,
   NetRiskScanNetworkError,
   KNOWN_ERROR_CODES,
+  ANONYMOUS_DAILY_LIMIT_CODE,
 } from "./client/errors.js";
-export type { KnownErrorCode, NetRiskScanApiErrorOptions, NetRiskScanNetworkErrorOptions } from "./client/errors.js";
+export type {
+  KnownErrorCode,
+  AnonymousLimitInfo,
+  NetRiskScanApiErrorOptions,
+  NetRiskScanNetworkErrorOptions,
+} from "./client/errors.js";
 export type {
   IpRiskResponse,
+  RequestUsage,
   UsageResponse,
   RiskBand,
   AssessmentGrade,

@@ -1,11 +1,42 @@
 import chalk from "chalk";
-import type { IpRiskResponse, ResponseMeta, RiskBand, UsageResponse } from "../client/types.js";
-import { formatDate, formatIndex, formatNullable, formatNumber, formatTriState } from "./format.js";
+import type {
+  IpRiskResponse,
+  RequestUsage,
+  ResponseMeta,
+  RiskBand,
+  UsageResponse,
+} from "../client/types.js";
+import {
+  formatDate,
+  formatIndex,
+  formatNullable,
+  formatNumber,
+  formatTriState,
+  formatUtcTimestamp,
+  row,
+} from "./format.js";
 
-const LABEL_WIDTH = 18;
-
-function row(label: string, value: string): string {
-  return `${label.padEnd(LABEL_WIDTH)}${value}`;
+/**
+ * Anonymous-trial rows for the human `check` output.
+ *
+ * `Available` is printed verbatim from `usage.remaining` - the server is the only authority on
+ * what is left, so this never falls back to `dailyLimit - used`. Each row is emitted only when
+ * its value is actually a number, because `0` is a legitimate value that a truthiness check
+ * would swallow on exactly the run where it matters most.
+ */
+function anonymousUsageLines(usage: RequestUsage): string[] {
+  const lines: string[] = [];
+  if (typeof usage.remaining === "number") {
+    lines.push(row("Available", formatNumber(usage.remaining)));
+  }
+  if (typeof usage.dailyLimit === "number") {
+    lines.push(row("Daily Limit", formatNumber(usage.dailyLimit)));
+  }
+  const reset = formatUtcTimestamp(usage.resetAt);
+  if (reset !== undefined) {
+    lines.push(row("Reset", reset));
+  }
+  return lines;
 }
 
 function bandColor(band: RiskBand | null): (text: string) => string {
@@ -29,7 +60,9 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
   lines.push("");
   lines.push(row("IP", ip));
   lines.push(row("Index", formatIndex(data.risk.index)));
-  lines.push(row("Band", data.risk.band ? bandColor(data.risk.band)(data.risk.band) : chalk.gray("N/A")));
+  lines.push(
+    row("Band", data.risk.band ? bandColor(data.risk.band)(data.risk.band) : chalk.gray("N/A")),
+  );
   lines.push(row("Assessment", data.risk.assessmentGrade));
   lines.push("");
 
@@ -64,6 +97,17 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
   lines.push(row("Abuse", formatTriState(data.flags.abuse)));
   lines.push("");
 
+  // Only for the anonymous trial. An API-key caller's allowance is a billing-period quota, a
+  // different thing entirely, and stays behind --verbose where it always was.
+  if (data.usage?.mode === "anonymous") {
+    const usageLines = anonymousUsageLines(data.usage);
+    if (usageLines.length > 0) {
+      lines.push(chalk.bold("Usage"));
+      lines.push(...usageLines);
+      lines.push("");
+    }
+  }
+
   lines.push(row("Request ID", data.requestId));
   lines.push("");
 
@@ -78,11 +122,19 @@ export function renderVerboseMeta(meta: ResponseMeta): void {
   const lines: string[] = [""];
   if (meta.rateLimit.remaining !== undefined && meta.rateLimit.limit !== undefined) {
     lines.push(
-      row("Rate limit", `${formatNumber(meta.rateLimit.remaining)} / ${formatNumber(meta.rateLimit.limit)} remaining`),
+      row(
+        "Rate limit",
+        `${formatNumber(meta.rateLimit.remaining)} / ${formatNumber(meta.rateLimit.limit)} remaining`,
+      ),
     );
   }
   if (meta.quota.remaining !== undefined && meta.quota.limit !== undefined) {
-    lines.push(row("Quota", `${formatNumber(meta.quota.remaining)} / ${formatNumber(meta.quota.limit)} remaining`));
+    lines.push(
+      row(
+        "Quota",
+        `${formatNumber(meta.quota.remaining)} / ${formatNumber(meta.quota.limit)} remaining`,
+      ),
+    );
   }
   lines.push(row("Request ID", meta.requestId));
   process.stdout.write(`${lines.join("\n")}\n`);

@@ -13,6 +13,14 @@ describe("exitCodeForApiErrorCode", () => {
     expect(exitCodeForApiErrorCode("quota_exceeded")).toBe(ExitCode.RateLimitOrQuota);
   });
 
+  /** The anonymous daily trial is an allowance too - code 5, not an eighth exit code. */
+  it("maps the anonymous daily trial limit to RateLimitOrQuota", () => {
+    expect(exitCodeForApiErrorCode("anonymous_daily_limit_reached")).toBe(
+      ExitCode.RateLimitOrQuota,
+    );
+    expect(exitCodeForApiErrorCode("anonymous_daily_limit_reached")).toBe(5);
+  });
+
   it("maps everything else to ApiError", () => {
     expect(exitCodeForApiErrorCode("invalid_ip")).toBe(ExitCode.ApiError);
     expect(exitCodeForApiErrorCode("not_found")).toBe(ExitCode.ApiError);

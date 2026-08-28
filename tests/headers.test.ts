@@ -41,7 +41,11 @@ describe("header parsing", () => {
   });
 
   it("returns undefined fields when headers are missing", () => {
-    expect(parseQuota(new Headers())).toEqual({ limit: undefined, used: undefined, remaining: undefined });
+    expect(parseQuota(new Headers())).toEqual({
+      limit: undefined,
+      used: undefined,
+      remaining: undefined,
+    });
   });
 });
 

@@ -19,8 +19,11 @@ export function exitCodeForApiErrorCode(code: string): ExitCodeValue {
     case "api_key_disabled":
     case "scope_not_allowed":
       return ExitCode.AuthError;
+    // The anonymous daily trial is an allowance like any other, so it reuses code 5 rather than
+    // adding an eighth exit code that every script would have to learn.
     case "rate_limit_exceeded":
     case "quota_exceeded":
+    case "anonymous_daily_limit_reached":
       return ExitCode.RateLimitOrQuota;
     default:
       return ExitCode.ApiError;

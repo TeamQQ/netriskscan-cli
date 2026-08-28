@@ -16,7 +16,8 @@ describe("formatIndex", () => {
 });
 
 describe("formatNullable", () => {
-  it("passes through a real string", () => expect(formatNullable("residential")).toBe("residential"));
+  it("passes through a real string", () =>
+    expect(formatNullable("residential")).toBe("residential"));
   it("null -> N/A", () => expect(formatNullable(null)).toBe("N/A"));
   it("undefined -> N/A", () => expect(formatNullable(undefined)).toBe("N/A"));
 });

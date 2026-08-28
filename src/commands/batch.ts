@@ -2,15 +2,15 @@ import type { Command } from "commander";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { NetRiskScanClient } from "../client/NetRiskScanClient.js";
-import { NetRiskScanApiError, NetRiskScanConfigError, NetRiskScanNetworkError } from "../client/errors.js";
+import { NetRiskScanApiError, NetRiskScanNetworkError } from "../client/errors.js";
+import type { AnonymousLimitInfo } from "../client/errors.js";
 import type { IpRiskResponse } from "../client/types.js";
-import { resolveApiKey, resolveBaseUrl } from "../utils/env.js";
+import { resolveOptionalApiKey, resolveBaseUrl } from "../utils/env.js";
 import { isValidIp } from "../utils/ip.js";
 import { runPool } from "../utils/pool.js";
 import { ExitCode, exitCodeForApiErrorCode, type ExitCodeValue } from "../utils/exitCode.js";
 import { printJsonLine } from "../output/jsonl.js";
 import { renderBatchTable } from "../output/table.js";
-import { printConfigError } from "../output/errors.js";
 
 /**
  * Client-side batch only: sends individual `GET /v1/ip-risk/{ip}` requests with controlled
@@ -23,6 +23,8 @@ export interface BatchItemError {
   code: string;
   message: string;
   requestId?: string;
+  /** Present on `anonymous_daily_limit_reached`, so the summary can report the real allowance. */
+  anonymousUsage?: AnonymousLimitInfo;
 }
 
 export type BatchItemResult =
@@ -42,7 +44,10 @@ export function registerBatchCommand(program: Command): void {
   program
     .command("batch <file>")
     .description("Check multiple IP addresses (client-side batch over GET /v1/ip-risk/{ip})")
-    .option("--api-key <key>", "NetRiskScan API key (overrides NETRISKSCAN_API_KEY)")
+    .option(
+      "--api-key <key>",
+      "NetRiskScan API key (optional; uses the anonymous trial when omitted)",
+    )
     .option("--base-url <url>", "Override the API base URL (advanced)")
     .option(
       "--concurrency <n>",
@@ -60,6 +65,10 @@ Notes:
   requests with controlled concurrency. NetRiskScan does not currently
   offer a server-side batch endpoint. Make sure the selected concurrency
   complies with the limits shown in your NetRiskScan Developer Dashboard.
+
+  An API key is optional. Without an API key, requests use the anonymous daily
+  trial, metered by public IP. How many remain is decided by the server, not by
+  this CLI, and is reported in the summary after the table.
 
 Input format:
   One IP per line. Blank lines and lines starting with # are ignored.
@@ -102,7 +111,12 @@ function parseConcurrency(value: string): number {
 
 function toBatchError(err: unknown): BatchItemError {
   if (err instanceof NetRiskScanApiError) {
-    return { code: err.code, message: err.message, requestId: err.requestId };
+    return {
+      code: err.code,
+      message: err.message,
+      requestId: err.requestId,
+      anonymousUsage: err.anonymousUsage,
+    };
   }
   if (err instanceof NetRiskScanNetworkError) {
     return { code: "network_error", message: err.message, requestId: err.requestId };
@@ -111,18 +125,6 @@ function toBatchError(err: unknown): BatchItemError {
 }
 
 async function runBatch(file: string, options: BatchOptions): Promise<void> {
-  let apiKey: string;
-  try {
-    apiKey = resolveApiKey(options.apiKey);
-  } catch (err) {
-    if (err instanceof NetRiskScanConfigError) {
-      printConfigError(err);
-      process.exitCode = ExitCode.AuthError;
-      return;
-    }
-    throw err;
-  }
-
   const ips = await readIps(file);
   if (ips.length === 0) {
     process.stderr.write("Error: no IP addresses found in input.\n");
@@ -130,8 +132,11 @@ async function runBatch(file: string, options: BatchOptions): Promise<void> {
     return;
   }
 
+  // No key means the anonymous trial. The CLI deliberately does not pre-check the input length
+  // against a daily allowance: it cannot know how much of today's allowance was already spent,
+  // and only the server can.
   const client = new NetRiskScanClient({
-    apiKey,
+    apiKey: resolveOptionalApiKey(options.apiKey),
     baseUrl: resolveBaseUrl(options.baseUrl),
     timeout: Number(options.timeout),
     maxRetries: Number(options.maxRetries),

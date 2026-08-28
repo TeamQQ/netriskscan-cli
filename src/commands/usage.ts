@@ -1,8 +1,12 @@
 import type { Command } from "commander";
 import ora from "ora";
 import { NetRiskScanClient } from "../client/NetRiskScanClient.js";
-import { NetRiskScanApiError, NetRiskScanConfigError, NetRiskScanNetworkError } from "../client/errors.js";
-import { resolveApiKey, resolveBaseUrl } from "../utils/env.js";
+import {
+  NetRiskScanApiError,
+  NetRiskScanConfigError,
+  NetRiskScanNetworkError,
+} from "../client/errors.js";
+import { resolveRequiredApiKey, resolveBaseUrl } from "../utils/env.js";
 import { ExitCode, exitCodeForApiErrorCode } from "../utils/exitCode.js";
 import { renderUsageResult, renderVerboseMeta } from "../output/human.js";
 import { printJson } from "../output/json.js";
@@ -21,14 +25,23 @@ interface UsageOptions {
 export function registerUsageCommand(program: Command): void {
   program
     .command("usage")
-    .description("Show API usage and quota for the current billing period")
-    .option("--api-key <key>", "NetRiskScan API key (overrides NETRISKSCAN_API_KEY)")
+    .description("Show API usage and quota for the current billing period (requires an API key)")
+    .option("--api-key <key>", "NetRiskScan API key (required for this command)")
     .option("--base-url <url>", "Override the API base URL (advanced)")
     .option("--json", "Output machine-readable JSON")
     .option("--verbose", "Show rate limit and request id")
     .option("--debug", "Show debug information on failure")
     .option("--timeout <ms>", "Request timeout in milliseconds", "10000")
     .option("--max-retries <n>", "Maximum automatic retries for 429/503", "3")
+    .addHelpText(
+      "after",
+      `
+Notes:
+  Requires a Developer API key. This reports Developer Account plan, billing
+  period and quota, which has no anonymous equivalent - unlike check and batch,
+  which work without a key.
+`,
+    )
     .action(async (options: UsageOptions) => {
       await runUsage(options);
     });
@@ -39,7 +52,7 @@ async function runUsage(options: UsageOptions): Promise<void> {
 
   let apiKey: string;
   try {
-    apiKey = resolveApiKey(options.apiKey);
+    apiKey = resolveRequiredApiKey(options.apiKey);
   } catch (err) {
     if (err instanceof NetRiskScanConfigError) {
       printConfigError(err);
@@ -58,7 +71,11 @@ async function runUsage(options: UsageOptions): Promise<void> {
 
   const spinner = useJson
     ? undefined
-    : ora({ text: "Fetching usage...", stream: process.stderr, isEnabled: process.stderr.isTTY }).start();
+    : ora({
+        text: "Fetching usage...",
+        stream: process.stderr,
+        isEnabled: process.stderr.isTTY,
+      }).start();
 
   try {
     const { data, meta } = await client.getUsage();

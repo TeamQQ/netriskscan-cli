@@ -1,16 +1,27 @@
 import type { Command } from "commander";
 import ora from "ora";
 import { NetRiskScanClient } from "../client/NetRiskScanClient.js";
-import { NetRiskScanApiError, NetRiskScanConfigError, NetRiskScanNetworkError } from "../client/errors.js";
+import {
+  ANONYMOUS_DAILY_LIMIT_CODE,
+  NetRiskScanApiError,
+  NetRiskScanNetworkError,
+} from "../client/errors.js";
 import type { IpRiskResponse, RiskFlagName } from "../client/types.js";
-import { resolveApiKey, resolveBaseUrl } from "../utils/env.js";
+import { resolveOptionalApiKey, resolveBaseUrl } from "../utils/env.js";
 import { isValidIp } from "../utils/ip.js";
 import { ExitCode, exitCodeForApiErrorCode, type ExitCodeValue } from "../utils/exitCode.js";
 import { renderCheckResult, renderVerboseMeta } from "../output/human.js";
 import { printJson } from "../output/json.js";
-import { printApiError, printConfigError, printNetworkError } from "../output/errors.js";
+import { printAnonymousLimitError, printApiError, printNetworkError } from "../output/errors.js";
 
-const KNOWN_FLAGS: readonly RiskFlagName[] = ["proxy", "vpn", "tor", "datacenter", "scanner", "abuse"];
+const KNOWN_FLAGS: readonly RiskFlagName[] = [
+  "proxy",
+  "vpn",
+  "tor",
+  "datacenter",
+  "scanner",
+  "abuse",
+];
 
 interface CheckOptions {
   apiKey?: string;
@@ -32,7 +43,10 @@ export function registerCheckCommand(program: Command): void {
   program
     .command("check <ip>")
     .description("Check IP risk and network intelligence")
-    .option("--api-key <key>", "NetRiskScan API key (overrides NETRISKSCAN_API_KEY)")
+    .option(
+      "--api-key <key>",
+      "NetRiskScan API key (optional; uses the anonymous trial when omitted)",
+    )
     .option("--base-url <url>", "Override the API base URL (advanced)")
     .option("--json", "Output machine-readable JSON")
     .option("--verbose", "Show rate limit, quota and request id")
@@ -54,6 +68,10 @@ Examples:
   $ netriskscan check 1.1.1.1 --json
   $ netriskscan check 1.2.3.4 --fail-below 60
   $ netriskscan check 1.2.3.4 --fail-on tor --fail-on proxy
+
+Notes:
+  An API key is optional. Without one, requests use the anonymous daily trial,
+  metered by public IP; the response reports how many are left.
 `,
     )
     .action(async (ip: string, options: CheckOptions) => {
@@ -66,7 +84,9 @@ async function runCheck(ip: string, options: CheckOptions): Promise<void> {
 
   for (const flag of options.failOn) {
     if (!KNOWN_FLAGS.includes(flag as RiskFlagName)) {
-      process.stderr.write(`Error: unknown --fail-on flag "${flag}". Expected one of: ${KNOWN_FLAGS.join(", ")}\n`);
+      process.stderr.write(
+        `Error: unknown --fail-on flag "${flag}". Expected one of: ${KNOWN_FLAGS.join(", ")}\n`,
+      );
       process.exitCode = ExitCode.InvalidArgument;
       return;
     }
@@ -78,20 +98,10 @@ async function runCheck(ip: string, options: CheckOptions): Promise<void> {
     return;
   }
 
-  let apiKey: string;
-  try {
-    apiKey = resolveApiKey(options.apiKey);
-  } catch (err) {
-    if (err instanceof NetRiskScanConfigError) {
-      printConfigError(err);
-      process.exitCode = ExitCode.AuthError;
-      return;
-    }
-    throw err;
-  }
-
+  // Undefined is a supported mode: the client then omits Authorization and the server serves the
+  // request from the anonymous daily trial.
   const client = new NetRiskScanClient({
-    apiKey,
+    apiKey: resolveOptionalApiKey(options.apiKey),
     baseUrl: resolveBaseUrl(options.baseUrl),
     timeout: Number(options.timeout),
     maxRetries: Number(options.maxRetries),
@@ -99,7 +109,11 @@ async function runCheck(ip: string, options: CheckOptions): Promise<void> {
 
   const spinner = useJson
     ? undefined
-    : ora({ text: `Checking ${ip}...`, stream: process.stderr, isEnabled: process.stderr.isTTY }).start();
+    : ora({
+        text: `Checking ${ip}...`,
+        stream: process.stderr,
+        isEnabled: process.stderr.isTTY,
+      }).start();
 
   try {
     const { data, meta } = await client.checkIp(ip);
@@ -144,7 +158,11 @@ function evaluateCiPolicy(data: IpRiskResponse, options: CheckOptions): ExitCode
 
 function handleCheckError(err: unknown, options: CheckOptions): void {
   if (err instanceof NetRiskScanApiError) {
-    printApiError(err, { debug: options.debug });
+    if (err.code === ANONYMOUS_DAILY_LIMIT_CODE) {
+      printAnonymousLimitError(err);
+    } else {
+      printApiError(err, { debug: options.debug });
+    }
     process.exitCode = exitCodeForApiErrorCode(err.code);
     return;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBackoffMs, isRetryableStatus } from "../src/client/retry.js";
+import { computeBackoffMs, isRetryableFailure, isRetryableStatus } from "../src/client/retry.js";
 
 describe("isRetryableStatus", () => {
   it("retries only 429 and 503", () => {
@@ -11,6 +11,24 @@ describe("isRetryableStatus", () => {
     for (const status of [400, 401, 403, 404]) {
       expect(isRetryableStatus(status)).toBe(false);
     }
+  });
+});
+
+describe("isRetryableFailure", () => {
+  /** Not every 429 is transient: one is a per-minute window, the other a spent daily allowance. */
+  it("retries a per-minute 429 but never the anonymous daily limit", () => {
+    expect(isRetryableFailure(429, "rate_limit_exceeded")).toBe(true);
+    expect(isRetryableFailure(429, "anonymous_daily_limit_reached")).toBe(false);
+  });
+
+  it("keeps 503 retryable and 4xx non-retryable", () => {
+    expect(isRetryableFailure(503, "temporarily_unavailable")).toBe(true);
+    expect(isRetryableFailure(401, "invalid_api_key")).toBe(false);
+  });
+
+  it("falls back to status alone when the server sent no error code", () => {
+    expect(isRetryableFailure(429)).toBe(true);
+    expect(isRetryableFailure(400)).toBe(false);
   });
 });
 

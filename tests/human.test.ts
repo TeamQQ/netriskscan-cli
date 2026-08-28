@@ -15,7 +15,10 @@ function render(data: IpRiskResponse): string {
   return out.replace(/\[[0-9;]*m/g, "");
 }
 
-function response(network: Partial<IpRiskResponse["network"]> = {}): IpRiskResponse {
+function response(
+  network: Partial<IpRiskResponse["network"]> = {},
+  usage?: IpRiskResponse["usage"],
+): IpRiskResponse {
   return {
     requestId: "req_test12345678",
     risk: { index: 78, band: "good", assessmentGrade: "complete" },
@@ -27,7 +30,22 @@ function response(network: Partial<IpRiskResponse["network"]> = {}): IpRiskRespo
       ...network,
     },
     flags: { proxy: false, vpn: false, tor: false, datacenter: null, scanner: false, abuse: false },
+    ...(usage === undefined ? {} : { usage }),
   };
+}
+
+function anonymous(usage: Partial<NonNullable<IpRiskResponse["usage"]>> = {}): IpRiskResponse {
+  return response(
+    {},
+    {
+      mode: "anonymous",
+      dailyLimit: 30,
+      used: 7,
+      remaining: 23,
+      resetAt: "2026-08-29T00:00:00Z",
+      ...usage,
+    },
+  );
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -114,5 +132,75 @@ describe("signals stay tri-state", () => {
 
     expect(out).toContain("Datacenter        Unknown");
     expect(out).toContain("Proxy             No");
+  });
+});
+
+describe("anonymous trial usage", () => {
+  it("shows the server-reported allowance as Available", () => {
+    const out = render(anonymous());
+
+    expect(out).toContain("Usage");
+    expect(out).toContain("Available         23");
+    expect(out).toContain("Daily Limit       30");
+  });
+
+  /**
+   * The 30th query of the day still succeeds, and zero is a real answer. A truthiness check would
+   * drop the row on precisely the run where the user most needs to see it.
+   */
+  it("prints Available 0 rather than omitting the row", () => {
+    const out = render(anonymous({ used: 30, remaining: 0 }));
+
+    expect(out).toContain("Available         0");
+    expect(out).toContain("Daily Limit       30");
+  });
+
+  /** Never `dailyLimit - used`: the server is the only authority on what is left. */
+  it("prints remaining verbatim even when it disagrees with dailyLimit minus used", () => {
+    const out = render(anonymous({ dailyLimit: 30, used: 7, remaining: 19 }));
+
+    expect(out).toContain("Available         19");
+    expect(out).not.toContain("Available         23");
+  });
+
+  /** The allowance resets on the UTC day, so a localized time would misdescribe the reset. */
+  it("renders the reset instant in UTC, not local time", () => {
+    const out = render(anonymous());
+
+    expect(out).toContain("Reset             2026-08-29 00:00 UTC");
+  });
+
+  it("omits the Reset row for a missing or unparseable resetAt", () => {
+    expect(render(anonymous({ resetAt: undefined }))).not.toContain("Reset");
+
+    const broken = render(anonymous({ resetAt: "not-a-date" }));
+    expect(broken).not.toContain("Reset");
+    expect(broken).not.toContain("Invalid Date");
+    expect(broken).toContain("Available         23");
+  });
+
+  it("places Usage between Signals and Request ID", () => {
+    const out = render(anonymous());
+
+    expect(out.indexOf("Signals")).toBeLessThan(out.indexOf("Usage"));
+    expect(out.indexOf("Usage")).toBeLessThan(out.indexOf("Request ID"));
+  });
+
+  /** An API-key caller's allowance is a billing quota, a different thing, shown under --verbose. */
+  it("does not show the anonymous block for a keyed request", () => {
+    const out = render(response({}, { mode: "api_key", remaining: 4900 }));
+
+    expect(out).not.toContain("Usage");
+    expect(out).not.toContain("Available");
+  });
+
+  /** Older servers send no usage object at all; that must render exactly as it always did. */
+  it("renders a legacy response with no usage field unchanged", () => {
+    const out = render(response());
+
+    expect(out).not.toContain("Usage");
+    expect(out).not.toContain("Available");
+    expect(out).not.toContain("undefined");
+    expect(out).toContain("Request ID        req_test12345678");
   });
 });

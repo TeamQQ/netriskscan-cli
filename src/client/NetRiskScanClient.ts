@@ -1,6 +1,7 @@
 import { NetRiskScanApiError, NetRiskScanConfigError, NetRiskScanNetworkError } from "./errors.js";
 import { generateRequestId, isValidRequestId, parseQuota, parseRateLimit } from "./headers.js";
-import { computeBackoffMs, isRetryableStatus, sleep } from "./retry.js";
+import { computeBackoffMs, isRetryableFailure, sleep } from "./retry.js";
+import type { AnonymousLimitInfo } from "./errors.js";
 import type {
   ApiErrorBody,
   ApiResult,
@@ -27,28 +28,53 @@ async function safeJson(res: Response): Promise<ApiErrorBody | undefined> {
 }
 
 /**
+ * Lifts the anonymous-trial fields off an error body, once, here. HTTP bodies are parsed in the
+ * client layer only - the output layer receives a typed error, never JSON.
+ */
+function parseAnonymousLimitInfo(body: ApiErrorBody | undefined): AnonymousLimitInfo | undefined {
+  const error = body?.error;
+  if (!error) return undefined;
+  const { dailyLimit, used, remaining, resetAt, signupUrl } = error;
+  if (
+    dailyLimit === undefined &&
+    used === undefined &&
+    remaining === undefined &&
+    resetAt === undefined &&
+    signupUrl === undefined
+  ) {
+    return undefined;
+  }
+  return { dailyLimit, used, remaining, resetAt, signupUrl };
+}
+
+/**
  * Client for the NetRiskScan Developer API (`/v1/*` only).
  *
- * @example
+ * Works with no configuration at all: without an API key it sends no `Authorization` header and
+ * the server serves the request from the anonymous daily trial, metered by public IP.
+ *
+ * @example Anonymous - no account, no key
  * ```ts
- * const client = new NetRiskScanClient({ apiKey: process.env.NETRISKSCAN_API_KEY! });
+ * const client = new NetRiskScanClient();
  * const { data } = await client.checkIp("1.1.1.1");
  * console.log(data.risk.index);
+ * console.log(data.usage?.remaining);
+ * ```
+ *
+ * @example Pass `apiKey` to use Developer Account quota instead of the anonymous trial
+ * ```ts
+ * const client = new NetRiskScanClient({ apiKey: process.env.NETRISKSCAN_API_KEY });
  * ```
  */
 export class NetRiskScanClient {
-  private readonly apiKey: string;
+  private readonly apiKey?: string;
   private readonly baseUrl: string;
   private readonly timeout: number;
   private readonly maxRetries: number;
 
-  constructor(options: NetRiskScanClientOptions) {
-    if (!options.apiKey) {
-      throw new NetRiskScanConfigError(
-        "NetRiskScan API key is required.\n\nSet NETRISKSCAN_API_KEY or use --api-key.",
-      );
-    }
-    this.apiKey = options.apiKey;
+  constructor(options: NetRiskScanClientOptions = {}) {
+    // An absent key is a supported mode, not a misconfiguration: it selects the anonymous trial.
+    this.apiKey = options.apiKey || undefined;
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
@@ -58,13 +84,22 @@ export class NetRiskScanClient {
     return this.request<IpRiskResponse>(`/v1/ip-risk/${encodeURIComponent(ip)}`, options);
   }
 
+  /**
+   * Account plan, billing period and quota. Unlike {@link checkIp} this is account data, so it
+   * has no anonymous equivalent and requires an API key.
+   */
   async getUsage(options: RequestOptions = {}): Promise<ApiResult<UsageResponse>> {
+    if (!this.apiKey) {
+      throw new NetRiskScanConfigError("An API key is required to query account usage.");
+    }
     return this.request<UsageResponse>("/v1/usage", options);
   }
 
   private async request<T>(path: string, options: RequestOptions): Promise<ApiResult<T>> {
     const requestId =
-      options.requestId && isValidRequestId(options.requestId) ? options.requestId : generateRequestId();
+      options.requestId && isValidRequestId(options.requestId)
+        ? options.requestId
+        : generateRequestId();
 
     let attempt = 0;
 
@@ -75,13 +110,19 @@ export class NetRiskScanClient {
       options.signal?.addEventListener("abort", onExternalAbort);
 
       try {
+        const headers: Record<string, string> = {
+          Accept: "application/json",
+          "X-Request-Id": requestId,
+        };
+        // Only ever sent when a key actually exists. A `Bearer undefined` would read as a bad key
+        // and earn a 401 instead of falling through to the anonymous trial.
+        if (this.apiKey) {
+          headers.Authorization = `Bearer ${this.apiKey}`;
+        }
+
         const res = await fetch(`${this.baseUrl}${path}`, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            Accept: "application/json",
-            "X-Request-Id": requestId,
-          },
+          headers,
           signal: timeoutController.signal,
         });
 
@@ -98,7 +139,7 @@ export class NetRiskScanClient {
         const retryAfterHeader = res.headers.get("retry-after");
         const retryAfter = retryAfterHeader !== null ? Number(retryAfterHeader) : undefined;
 
-        if (isRetryableStatus(res.status) && attempt < this.maxRetries) {
+        if (isRetryableFailure(res.status, body?.error?.code) && attempt < this.maxRetries) {
           attempt += 1;
           await sleep(computeBackoffMs(attempt, retryAfter));
           continue;
@@ -109,6 +150,7 @@ export class NetRiskScanClient {
           code: body?.error?.code ?? "unknown_error",
           requestId: body?.error?.requestId ?? responseRequestId,
           retryAfter,
+          anonymousUsage: parseAnonymousLimitInfo(body),
         });
       } catch (err) {
         if (err instanceof NetRiskScanApiError) {
@@ -123,10 +165,13 @@ export class NetRiskScanClient {
             requestId,
           });
         }
-        throw new NetRiskScanNetworkError(err instanceof Error ? err.message : "Network request failed", {
-          cause: err,
-          requestId,
-        });
+        throw new NetRiskScanNetworkError(
+          err instanceof Error ? err.message : "Network request failed",
+          {
+            cause: err,
+            requestId,
+          },
+        );
       } finally {
         clearTimeout(timer);
         options.signal?.removeEventListener("abort", onExternalAbort);

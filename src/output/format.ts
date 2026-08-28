@@ -24,3 +24,29 @@ export function formatNumber(value: number): string {
 export function formatDate(iso: string): string {
   return iso.slice(0, 10);
 }
+
+/** Shared label column so `check`, `batch` and the error renderers line up identically. */
+export const LABEL_WIDTH = 18;
+
+export function row(label: string, value: string): string {
+  return `${label.padEnd(LABEL_WIDTH)}${value}`;
+}
+
+/**
+ * Renders an ISO-8601 instant as `2026-08-29 00:00 UTC`, deliberately *not* in local time: the
+ * anonymous allowance resets on the UTC day, and a localized timestamp would misdescribe when
+ * that happens for most of the world.
+ *
+ * Returns `undefined` for a missing or unparseable value so callers can drop the row rather than
+ * print "Invalid Date".
+ */
+export function formatUtcTimestamp(iso: string | null | undefined): string | undefined {
+  if (!iso) return undefined;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return (
+    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
+    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`
+  );
+}

@@ -38,6 +38,11 @@ Datacenter        No
 Scanner           Unknown
 Abuse             No
 
+Usage
+Available         29
+Daily Limit       30
+Reset             2026-08-29 00:00 UTC
+
 Request ID        req_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Explore
@@ -45,9 +50,13 @@ Web               https://www.netriskscan.com
 GitHub            https://github.com/TeamQQ/netriskscan-cli
 ```
 
+**No account or API key required** for the anonymous trial - the command above works on a
+clean machine. The `Usage` block is the server telling you how much of today's free
+allowance is left; the CLI never estimates it. Add an API key when you need more
+(see [Getting an API key](#getting-an-api-key)).
+
 Example output - actual values come from the live API and can change as reputation and
-threat data changes. Requires an API key (see [Getting an API key](#getting-an-api-key));
-the free plan needs no credit card.
+threat data changes.
 
 ## Why NetRiskScan?
 
@@ -56,6 +65,7 @@ the free plan needs no credit card.
 - Proxy, VPN, Tor, abuse, blacklist and threat signals
 - One normalized NetRiskScan Index instead of raw provider scores
 - `unknown` and `not applicable` states are preserved, never collapsed into "false"
+- Anonymous daily trial: run your first check with no account, no key, no configuration
 - Human-readable CLI output plus JSON / JSONL for scripts, batches and CI
 
 NetRiskScan can identify known infrastructure such as search crawlers, public DNS
@@ -77,6 +87,7 @@ Powered by the [NetRiskScan Developer API](#developer-api).
 - [Introduction](#introduction)
 - [Features](#features)
 - [Installation](#installation)
+- [Anonymous trial](#anonymous-trial)
 - [Getting an API key](#getting-an-api-key)
 - [Quick start](#quick-start)
 - [IP risk check](#ip-risk-check)
@@ -112,6 +123,7 @@ the server is always the single source of truth.
 
 ## Features
 
+- `check` and `batch` with no API key at all, via the anonymous daily trial
 - `check`, `usage`, and client-side `batch` commands
 - IPv4 and IPv6 support
 - Human-readable terminal output, `--json`, and `--jsonl` (batch) modes
@@ -139,7 +151,69 @@ netriskscan check 1.1.1.1
 
 Requires Node.js >= 20.
 
+## Anonymous trial
+
+`check` and `batch` work without any credentials. When no API key is configured, the CLI
+sends **no** `Authorization` header at all, and the Developer API serves the request from
+an anonymous daily trial metered by the caller's public IP (currently 30 requests per
+public IP per UTC day - the allowance reported in the response is always the authority,
+not this number).
+
+```bash
+npx netriskscan-cli check 8.8.8.8
+```
+
+Every anonymous response reports where you stand, and the CLI prints it verbatim:
+
+```text
+Usage
+Available         29
+Daily Limit       30
+Reset             2026-08-29 00:00 UTC
+```
+
+`Available` is `usage.remaining` exactly as returned. The CLI keeps no local counter and
+never recomputes it from `dailyLimit - used`.
+
+When the day's allowance is spent, the next request returns
+`429 anonymous_daily_limit_reached` and the CLI exits `5` with:
+
+```text
+NetRiskScan
+
+Anonymous daily trial limit reached.
+
+Usage
+Available         0
+Daily Limit       30
+Reset             2026-08-29 00:00 UTC
+
+Get more queries
+https://www.netriskscan.com/developers
+```
+
+That response is deterministic until the reset, so it is **never** retried automatically.
+
+Which commands need a key:
+
+| Command             | API key                                                         |
+| ------------------- | --------------------------------------------------------------- |
+| `netriskscan check` | Optional - anonymous trial when omitted                         |
+| `netriskscan batch` | Optional - anonymous trial when omitted                         |
+| `netriskscan usage` | **Required** - reports Developer Account plan and billing quota |
+
+A key that the server rejects is never downgraded to an anonymous request: a configured
+key that fails returns `401 invalid_api_key` and exit code `3`. The access mode is decided
+purely by whether a key is present.
+
 ## Getting an API key
+
+The anonymous trial does not require an API key. Create one when you need:
+
+- more requests than the daily trial allows
+- account quota instead of a per-IP allowance
+- billing-period usage reporting (`netriskscan usage`)
+- a production integration
 
 1. Create a NetRiskScan Developer account and open the **Developer Dashboard**.
 2. Go to **API Keys** and create one, selecting the scopes you need
@@ -162,6 +236,14 @@ export NETRISKSCAN_API_KEY="nrs_live_xxx"
 ## Quick start
 
 ```bash
+npx netriskscan-cli check 1.1.1.1
+```
+
+No setup required - no account, no key, no configuration file.
+
+With an API key, for higher volume, account quota and `usage`:
+
+```bash
 export NETRISKSCAN_API_KEY="nrs_live_xxx"
 
 netriskscan check 1.1.1.1
@@ -175,7 +257,8 @@ netriskscan batch ips.txt --jsonl > results.jsonl
 netriskscan check <ip> [options]
 ```
 
-Calls `GET /v1/ip-risk/{ip}` - no query string parameters are ever sent.
+Calls `GET /v1/ip-risk/{ip}` - no query string parameters are ever sent. An API key is
+optional; without one the request uses the [anonymous trial](#anonymous-trial).
 
 ```bash
 $ netriskscan check 1.1.1.1
@@ -226,17 +309,17 @@ you opt into CI policy checks with `--fail-below` (see [CI/CD](#cicd)).
 
 ### Options
 
-| Option | Description |
-| --- | --- |
-| `--api-key <key>` | API key for this call (overrides `NETRISKSCAN_API_KEY`) |
-| `--base-url <url>` | Override the API base URL (advanced) |
-| `--json` | Machine-readable JSON output (see [JSON output](#json-output)) |
-| `--verbose` | Also print rate limit, quota, and request id |
-| `--debug` | Print a stack trace / extra detail on failure |
-| `--timeout <ms>` | Request timeout in milliseconds (default `10000`) |
-| `--max-retries <n>` | Max automatic retries for `429`/`503` (default `3`) |
-| `--fail-below <index>` | CI gate: exit non-zero if `risk.index` is below this threshold |
-| `--fail-on <flag>` | CI gate: exit non-zero if the given flag is `true` (repeatable) |
+| Option                 | Description                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| `--api-key <key>`      | API key for this call, optional (overrides `NETRISKSCAN_API_KEY`; anonymous trial when omitted) |
+| `--base-url <url>`     | Override the API base URL (advanced)                                                            |
+| `--json`               | Machine-readable JSON output (see [JSON output](#json-output))                                  |
+| `--verbose`            | Also print rate limit, quota, and request id                                                    |
+| `--debug`              | Print a stack trace / extra detail on failure                                                   |
+| `--timeout <ms>`       | Request timeout in milliseconds (default `10000`)                                               |
+| `--max-retries <n>`    | Max automatic retries for `429`/`503` (default `3`)                                             |
+| `--fail-below <index>` | CI gate: exit non-zero if `risk.index` is below this threshold                                  |
+| `--fail-on <flag>`     | CI gate: exit non-zero if the given flag is `true` (repeatable)                                 |
 
 ## Usage & quota
 
@@ -244,7 +327,15 @@ you opt into CI policy checks with `--fail-below` (see [CI/CD](#cicd)).
 netriskscan usage
 ```
 
-Calls `GET /v1/usage` (requires the `usage:read` scope).
+Calls `GET /v1/usage`. **This command requires an API key** (with the `usage:read`
+scope): it reports Developer Account plan, billing period and quota, which has no
+anonymous equivalent. Without a key it fails immediately, without sending a request:
+
+```text
+Error: An API key is required for the usage command.
+
+Set NETRISKSCAN_API_KEY or use --api-key.
+```
 
 ```bash
 $ netriskscan usage
@@ -276,7 +367,9 @@ netriskscan batch <file> [options]
 
 **Important:** NetRiskScan does not currently expose a server-side batch endpoint. This
 command is a **client-side batch**: it sends individual `GET /v1/ip-risk/{ip}` requests
-with a controlled concurrency limit. It never calls `/v1/ip-risk/batch` or
+with a controlled concurrency limit. An API key is optional here too - without one, every
+request draws on the [anonymous trial](#anonymous-trial), and the summary reports what the
+server says is left. It never calls `/v1/ip-risk/batch` or
 `/v1/ip-risk/query` - those endpoints are not open and currently return
 `404 feature_not_available`.
 
@@ -309,16 +402,34 @@ limits shown in your NetRiskScan Developer Dashboard for your plan.
 
 A failure on one IP never drops the others - every input line gets a result.
 
+Run anonymously and the human summary ends with the trial position:
+
+```text
+4 succeeded, 0 failed
+
+Anonymous trial
+Available         19
+Daily Limit       30
+```
+
+`Available` is the **lowest** `usage.remaining` seen in the batch, because concurrent
+responses do not arrive in the order the server charged them. If any request came back
+`anonymous_daily_limit_reached`, it reports `0`. The CLI never rejects an input file for
+being longer than the daily allowance: it cannot know how much of today's allowance you
+have already spent - only the server can. `--jsonl` output is unaffected; each line's
+`result.usage` object already carries this, and no plain text is ever mixed into the
+stream.
+
 ### Options
 
-| Option | Description |
-| --- | --- |
-| `--api-key <key>` | API key for this run (overrides `NETRISKSCAN_API_KEY`) |
-| `--base-url <url>` | Override the API base URL (advanced) |
-| `--concurrency <n>` | Concurrent requests (default `5`, max `20`) |
-| `--jsonl` | Newline-delimited JSON output (see [JSONL output](#jsonl-output)) |
-| `--timeout <ms>` | Per-request timeout in milliseconds (default `10000`) |
-| `--max-retries <n>` | Max automatic retries per request for `429`/`503` (default `3`) |
+| Option              | Description                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| `--api-key <key>`   | API key for this run, optional (overrides `NETRISKSCAN_API_KEY`; anonymous trial when omitted) |
+| `--base-url <url>`  | Override the API base URL (advanced)                                                           |
+| `--concurrency <n>` | Concurrent requests (default `5`, max `20`)                                                    |
+| `--jsonl`           | Newline-delimited JSON output (see [JSONL output](#jsonl-output))                              |
+| `--timeout <ms>`    | Per-request timeout in milliseconds (default `10000`)                                          |
+| `--max-retries <n>` | Max automatic retries per request for `429`/`503` (default `3`)                                |
 
 ## JSON output
 
@@ -333,8 +444,20 @@ coerced to `false`, `0`, or a string):
 {
   "requestId": "req_8f3ab21c9d",
   "risk": { "index": 72, "band": "good", "assessmentGrade": "complete" },
-  "network": { "type": "residential", "connectionType": "isp", "asn": "AS4134", "organization": "China Telecom" },
-  "flags": { "proxy": false, "vpn": false, "tor": false, "datacenter": false, "scanner": false, "abuse": false }
+  "network": {
+    "type": "residential",
+    "connectionType": "isp",
+    "asn": "AS4134",
+    "organization": "China Telecom"
+  },
+  "flags": {
+    "proxy": false,
+    "vpn": false,
+    "tor": false,
+    "datacenter": false,
+    "scanner": false,
+    "abuse": false
+  }
 }
 ```
 
@@ -383,23 +506,23 @@ Rules:
 
 ## Environment variables
 
-| Variable | Description |
-| --- | --- |
-| `NETRISKSCAN_API_KEY` | Default API key, used when `--api-key` is not passed |
-| `NETRISKSCAN_BASE_URL` | Advanced: override the API base URL, used when `--base-url` is not passed |
+| Variable               | Description                                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `NETRISKSCAN_API_KEY`  | Default API key, used when `--api-key` is not passed. Optional for `check`/`batch`; required for `usage` |
+| `NETRISKSCAN_BASE_URL` | Advanced: override the API base URL, used when `--base-url` is not passed                                |
 
 ## Exit codes
 
-| Code | Meaning |
-| --- | --- |
-| `0` | Success |
-| `1` | General CLI error |
-| `2` | Invalid CLI argument |
-| `3` | Authentication / authorization failure |
-| `4` | API request failure |
-| `5` | Rate limit / quota exceeded |
-| `6` | CI policy failed (`--fail-below` / `--fail-on`) |
-| `7` | Assessment unavailable (`--fail-below` used against a `null` index) |
+| Code | Meaning                                                             |
+| ---- | ------------------------------------------------------------------- |
+| `0`  | Success                                                             |
+| `1`  | General CLI error                                                   |
+| `2`  | Invalid CLI argument                                                |
+| `3`  | Authentication / authorization failure                              |
+| `4`  | API request failure                                                 |
+| `5`  | Rate limit / quota exceeded, including the anonymous daily trial    |
+| `6`  | CI policy failed (`--fail-below` / `--fail-on`)                     |
+| `7`  | Assessment unavailable (`--fail-below` used against a `null` index) |
 
 These codes are stable and part of the CLI's public contract.
 
@@ -430,38 +553,58 @@ Request ID req_8f3ab21c9d
 
 Known error codes:
 
-| HTTP status | `error.code` | Meaning |
-| --- | --- | --- |
-| 400 | `invalid_ip` | The address is not a valid IPv4/IPv6 address |
-| 400 | `invalid_request` | Unsupported query parameter, or request too large |
-| 400 | `unsupported_parameter` | e.g. `forceRefresh` / `force_refresh` / `refresh` - not supported |
-| 401 | `invalid_api_key` | Missing/malformed `Authorization` header, or key doesn't exist |
-| 403 | `api_key_disabled` | Key revoked/expired, or account/plan unavailable |
-| 403 | `scope_not_allowed` | Key lacks the scope required for this endpoint |
-| 404 | `not_found` | Unknown path |
-| 404 | `feature_not_available` | Endpoint not yet available (e.g. batch, see above) |
-| 429 | `rate_limit_exceeded` | Per-minute request limit exceeded |
-| 429 | `quota_exceeded` | Billing-period quota exhausted |
-| 503 | `temporarily_unavailable` | Transient upstream/service issue - retry later |
+| HTTP status | `error.code`                    | Meaning                                                                                               |
+| ----------- | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 400         | `invalid_ip`                    | The address is not a valid IPv4/IPv6 address                                                          |
+| 400         | `invalid_request`               | Unsupported query parameter, or request too large                                                     |
+| 400         | `unsupported_parameter`         | e.g. `forceRefresh` / `force_refresh` / `refresh` - not supported                                     |
+| 401         | `invalid_api_key`               | Missing/malformed `Authorization` header, or key doesn't exist                                        |
+| 403         | `api_key_disabled`              | Key revoked/expired, or account/plan unavailable                                                      |
+| 403         | `scope_not_allowed`             | Key lacks the scope required for this endpoint                                                        |
+| 404         | `not_found`                     | Unknown path                                                                                          |
+| 404         | `feature_not_available`         | Endpoint not yet available (e.g. batch, see above)                                                    |
+| 429         | `rate_limit_exceeded`           | Per-minute request limit exceeded                                                                     |
+| 429         | `quota_exceeded`                | Billing-period quota exhausted                                                                        |
+| 429         | `anonymous_daily_limit_reached` | Anonymous daily trial exhausted. Never retried automatically - it cannot succeed before the UTC reset |
+| 503         | `temporarily_unavailable`       | Transient upstream/service issue - retry later                                                        |
 
-Only `429` and `503` are retried automatically, honoring `Retry-After` when present and
-falling back to exponential backoff with jitter otherwise. `400` / `401` / `403` / `404`
-are never retried automatically.
+Transient `429 rate_limit_exceeded` and `503` responses may be retried automatically,
+honoring `Retry-After` when present and falling back to exponential backoff with jitter
+otherwise. `anonymous_daily_limit_reached` is **never** retried, even though it is also a
+`429`: the daily allowance cannot come back before the UTC reset, so retrying would only
+repeat the same failure three more times. `400` / `401` / `403` / `404` are never retried
+either.
 
 Pass `--debug` to any command to include a stack trace on failure. Without it, errors
 are shown as a clean summary - never a raw stack dump.
 
 ## Rate limits & quota
 
+The anonymous daily trial and a plan's billing-period quota are different things, reported
+through different channels. Do not read one as the other.
+
+### Anonymous daily trial
+
+Reported in the response body, on every request:
+
+| Field              | Meaning                                                          |
+| ------------------ | ---------------------------------------------------------------- |
+| `usage.mode`       | `anonymous` when the request was served by the trial             |
+| `usage.remaining`  | Requests still available today - authoritative, never recomputed |
+| `usage.dailyLimit` | The trial's daily allowance                                      |
+| `usage.resetAt`    | When the allowance resets (UTC day boundary)                     |
+
+### API key quota
+
 Every successful `/v1/*` response carries live rate limit and quota headers, so you
 don't need a separate call to `/v1/usage` to know where you stand:
 
-| Header | Meaning |
-| --- | --- |
-| `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset` | Per-minute limit |
-| `X-Quota-Limit` / `X-Quota-Used` / `X-Quota-Remaining` | Billing-period quota |
-| `X-Request-Id` | Request trace id (echoes yours, or a generated one) |
-| `Retry-After` | Present on `429` responses |
+| Header                                                              | Meaning                                             |
+| ------------------------------------------------------------------- | --------------------------------------------------- |
+| `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset` | Per-minute limit                                    |
+| `X-Quota-Limit` / `X-Quota-Used` / `X-Quota-Remaining`              | Billing-period quota                                |
+| `X-Request-Id`                                                      | Request trace id (echoes yours, or a generated one) |
+| `Retry-After`                                                       | Present on `429` responses                          |
 
 See them with:
 
@@ -481,11 +624,31 @@ The API client is a standalone module, independent of the CLI layer, so it can b
 directly from Node.js/TypeScript and will move to `@netriskscan/sdk` in a future release
 without changing its shape:
 
+The client needs no configuration at all. Without an API key it sends no `Authorization`
+header and uses the anonymous trial:
+
+```ts
+import { NetRiskScanClient } from "netriskscan-cli";
+
+const client = new NetRiskScanClient();
+
+const { data } = await client.checkIp("1.1.1.1");
+console.log(data.risk.index);
+
+if (data.usage?.mode === "anonymous") {
+  console.log("available:", data.usage.remaining);
+}
+```
+
+Pass `apiKey` to use Developer Account quota instead. `getUsage()` is account data and
+always requires a key - without one it throws `NetRiskScanConfigError` before any request
+is made:
+
 ```ts
 import { NetRiskScanClient, NetRiskScanApiError } from "netriskscan-cli";
 
 const client = new NetRiskScanClient({
-  apiKey: process.env.NETRISKSCAN_API_KEY!,
+  apiKey: process.env.NETRISKSCAN_API_KEY,
   timeout: 10000,
   maxRetries: 3,
 });
@@ -524,9 +687,9 @@ See [examples/](examples/) for runnable scripts.
 
 ## Developer API
 
-| | |
-| --- | --- |
-| Base URL | `https://api.netriskscan.com` |
+|                 |                                             |
+| --------------- | ------------------------------------------- |
+| Base URL        | `https://api.netriskscan.com`               |
 | Current version | `v1` (path prefix `/v1`, **not** `/api/v1`) |
 
 This is a completely separate system from the netriskscan.com website's internal
@@ -535,8 +698,11 @@ guarantees between the two. `netriskscan-cli` only ever calls `/v1/*`.
 
 Currently available endpoints:
 
-- `GET /v1/ip-risk/{ip}` - requires `ip-risk:read`
-- `GET /v1/usage` - requires `usage:read`
+- `GET /v1/ip-risk/{ip}`
+  - anonymous access supported
+  - API key optional
+  - API key requests use account quota and require `ip-risk:read`
+- `GET /v1/usage` - requires an API key with `usage:read`
 
 There is currently **no** server-side batch, history, or key-management endpoint
 (`POST /v1/ip-risk/batch`, `POST /v1/ip-risk/query`, `GET /v1/history`,

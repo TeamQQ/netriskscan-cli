@@ -45,6 +45,30 @@ export interface IpRiskResponse {
     scanner: boolean | null;
     abuse: boolean | null;
   };
+  /**
+   * Access mode and, for the anonymous trial, how much of today's allowance is left.
+   *
+   * Optional on purpose: older servers omit it, and an API-key request need not carry the
+   * same shape. Read it defensively and never recompute `remaining` from `dailyLimit - used`
+   * - the server is the only authority on what the caller may still spend.
+   */
+  usage?: RequestUsage;
+}
+
+/**
+ * Per-request usage reported by the server.
+ *
+ * `mode` is deliberately `string`, not a union: the server may introduce further modes and an
+ * unrecognised one must render, not throw. The anonymous trial reports `"anonymous"`.
+ */
+export interface RequestUsage {
+  mode: string;
+  dailyLimit?: number;
+  used?: number;
+  /** Requests still available to this caller. Authoritative - never derive it client-side. */
+  remaining?: number;
+  /** ISO-8601 instant at which the allowance resets. The anonymous trial resets on the UTC day. */
+  resetAt?: string;
 }
 
 export type RiskFlagName = keyof IpRiskResponse["flags"];
@@ -71,6 +95,16 @@ export interface ApiErrorBody {
     code: string;
     message: string;
     requestId?: string;
+
+    /**
+     * Sent with `anonymous_daily_limit_reached`. All optional so an older server, or any other
+     * error code, still parses into the same shape.
+     */
+    dailyLimit?: number;
+    used?: number;
+    remaining?: number;
+    resetAt?: string;
+    signupUrl?: string;
   };
 }
 
@@ -98,7 +132,11 @@ export interface ApiResult<T> {
 }
 
 export interface NetRiskScanClientOptions {
-  apiKey: string;
+  /**
+   * Developer API key. Omit it to use the anonymous trial: no `Authorization` header is sent and
+   * the server meters the caller by public IP. Required only for account-level endpoints.
+   */
+  apiKey?: string;
   /** Override the API base URL. Defaults to https://api.netriskscan.com. */
   baseUrl?: string;
   /** Request timeout in milliseconds. Defaults to 10000. */
