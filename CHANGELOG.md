@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.2.0...v1.3.0) (2026-08-28)
+
+
+### Features
+
+* **cli:** add anonymous IP check trial ([a02c9df](https://github.com/TeamQQ/netriskscan-cli/commit/a02c9df33fc443cba253d95770f8cb27d6435bdb))
+
 # [1.2.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.1.0...v1.2.0) (2026-08-27)
 
 
