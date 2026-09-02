@@ -15,6 +15,8 @@ export type {
 } from "./client/errors.js";
 export type {
   IpRiskResponse,
+  IpLocation,
+  RiskReason,
   RequestUsage,
   UsageResponse,
   RiskBand,

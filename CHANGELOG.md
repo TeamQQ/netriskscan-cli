@@ -1,3 +1,23 @@
+## Unreleased
+
+### Added
+
+- IP geolocation output for `check` (`Location`: country, region, city, time zone), shown
+  only for the fields the server actually resolved
+- Public risk-reason rendering for `check` (`Risk Reasons`), shown only when the server
+  sent any
+- SDK typings for `location` and `risk.reasons`: `IpLocation` and `RiskReason`, both
+  exported from the package entry point
+- Forward-compatible handling of future reason codes, categories and severities - an
+  unrecognised value renders instead of throwing or being dropped
+
+### Notes
+
+- `--json` / `--jsonl` remain a passthrough of the API response, so both new fields appear
+  there in their raw machine form with no remapping
+- A server that predates either field still works unchanged, and neither field affects
+  `risk.index`, `--fail-below`, `--fail-on`, or any exit code
+
 # [1.4.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.3.0...v1.4.0) (2026-09-02)
 
 

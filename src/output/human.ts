@@ -1,20 +1,25 @@
 import chalk from "chalk";
 import type {
+  IpLocation,
   IpRiskResponse,
   RequestUsage,
   ResponseMeta,
   RiskBand,
+  RiskReason,
   UsageResponse,
 } from "../client/types.js";
 import {
   formatDate,
+  formatGeoName,
   formatIndex,
   formatNullable,
   formatNumber,
   formatOrDash,
   formatProxyType,
+  formatRiskReasonCode,
   formatTriState,
   formatUtcTimestamp,
+  reasonRow,
   row,
 } from "./format.js";
 
@@ -38,6 +43,63 @@ function anonymousUsageLines(usage: RequestUsage): string[] {
   if (reset !== undefined) {
     lines.push(row("Reset", reset));
   }
+  return lines;
+}
+
+/**
+ * Rows for the server's own explanations of the assessment.
+ *
+ * Rendering only: the list is whatever `risk.reasons` contained, in the server's order, with no
+ * entry derived from `flags`/`network`, none filtered out, and none re-ranked. An empty or absent
+ * list yields no rows at all, so the caller drops the section rather than printing a heading over
+ * nothing - the common case for an ordinary address.
+ */
+function riskReasonLines(reasons: readonly RiskReason[] | undefined): string[] {
+  if (reasons === undefined || reasons.length === 0) return [];
+  return reasons.map((reason) => {
+    const severity = reason.severity ?? "";
+    return reasonRow(formatRiskReasonCode(reason.code), severityColor(severity)(severity));
+  });
+}
+
+/**
+ * Severity is a secondary cue, never the message itself: the label already says what was found, so
+ * an unrecognised severity simply renders uncoloured instead of being mapped to a guessed level.
+ *
+ * `info` is deliberately dim rather than warning-coloured - `Verified Search Crawler` and
+ * `Public Infrastructure` explain why an address is *clean*, and colouring them like a threat
+ * would misrepresent the server's own assessment.
+ */
+function severityColor(severity: string): (text: string) => string {
+  switch (severity) {
+    case "critical":
+    case "high":
+      return chalk.red;
+    case "medium":
+      return chalk.yellow;
+    case "info":
+      return chalk.gray;
+    default:
+      return (text: string) => text;
+  }
+}
+
+/**
+ * Rows for network-level geolocation - where the network is routed, not where a device is.
+ *
+ * Each row appears only when the server actually sent that field: geo resolution is independently
+ * partial (a country with no city is normal), and five "N/A" rows would be noise dressed up as
+ * data. An absent `location` object yields no rows, so the caller drops the whole section.
+ */
+function locationLines(location: IpLocation | null | undefined): string[] {
+  if (!location) return [];
+  const lines: string[] = [];
+  const country = formatGeoName(location.country, location.countryCode);
+  if (country !== undefined) lines.push(row("Country", country));
+  const region = formatGeoName(location.region, location.regionCode);
+  if (region !== undefined) lines.push(row("Region", region));
+  if (location.city) lines.push(row("City", location.city));
+  if (location.timeZone) lines.push(row("Time Zone", location.timeZone));
   return lines;
 }
 
@@ -73,6 +135,16 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
     lines.push("");
   }
 
+  // Directly under the verdict it explains, and only when the server sent one: these are the
+  // server's reasons, so an empty or absent list means there is nothing to show - never a cue for
+  // the CLI to work some out from flags.
+  const reasonLines = riskReasonLines(data.risk.reasons);
+  if (reasonLines.length > 0) {
+    lines.push(chalk.bold("Risk Reasons"));
+    lines.push(...reasonLines);
+    lines.push("");
+  }
+
   lines.push(chalk.bold("Network"));
   lines.push(row("Type", formatNullable(data.network.type)));
   // Omitted entirely when absent, unlike the fields around them, which render "N/A". Those describe every
@@ -89,6 +161,13 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
   lines.push(row("ASN", formatNullable(data.network.asn)));
   lines.push(row("Organization", formatNullable(data.network.organization)));
   lines.push("");
+
+  const geoLines = locationLines(data.location);
+  if (geoLines.length > 0) {
+    lines.push(chalk.bold("Location"));
+    lines.push(...geoLines);
+    lines.push("");
+  }
 
   lines.push(chalk.bold("Signals"));
   lines.push(row("Proxy", formatTriState(data.flags.proxy)));

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderCheckResult } from "../src/output/human.js";
-import type { IpRiskResponse } from "../src/client/types.js";
+import type { IpLocation, IpRiskResponse, RiskReason } from "../src/client/types.js";
 
 /** Captures what renderCheckResult wrote, with colour codes stripped so assertions read plainly. */
 function render(data: IpRiskResponse): string {
@@ -330,5 +330,303 @@ describe("anonymous trial usage", () => {
     expect(out).not.toContain("Available");
     expect(out).not.toContain("undefined");
     expect(out).toContain("Request ID        req_test12345678");
+  });
+});
+
+/** A response carrying server-sent geolocation. Every field is independently nullable. */
+function located(location: Partial<IpLocation> = {}): IpRiskResponse {
+  return {
+    ...response(),
+    location: {
+      countryCode: "US",
+      country: "United States",
+      regionCode: "CA",
+      region: "California",
+      city: "Los Angeles",
+      timeZone: "America/Los_Angeles",
+      ...location,
+    },
+  };
+}
+
+/** A response carrying server-sent reasons. `undefined` models a server that predates the field. */
+function explained(reasons: RiskReason[] | undefined): IpRiskResponse {
+  const base = response();
+  return reasons === undefined ? base : { ...base, risk: { ...base.risk, reasons } };
+}
+
+describe("Location section", () => {
+  it("shows the full geolocation the server sent", () => {
+    const out = render(located());
+
+    expect(out).toContain("Location");
+    expect(out).toContain("Country           United States (US)");
+    expect(out).toContain("Region            California (CA)");
+    expect(out).toContain("City              Los Angeles");
+    expect(out).toContain("Time Zone         America/Los_Angeles");
+  });
+
+  it("is placed between Network and Signals", () => {
+    const out = render(located());
+
+    expect(out.indexOf("Network")).toBeLessThan(out.indexOf("Location"));
+    expect(out.indexOf("Location")).toBeLessThan(out.indexOf("Signals"));
+  });
+
+  /**
+   * Geo resolution is independently partial - a country with no city is an ordinary result, not an
+   * error. Printing five "N/A" rows would dress absence up as data.
+   */
+  it("prints only the fields the server actually resolved", () => {
+    const out = render(
+      located({ regionCode: null, region: null, city: null, timeZone: "Europe/Berlin" }),
+    );
+
+    expect(out).toContain("Location");
+    expect(out).toContain("Time Zone         Europe/Berlin");
+    expect(out).not.toContain("Region");
+    expect(out).not.toContain("City");
+    expect(out).not.toContain("undefined");
+    expect(out).not.toContain("null");
+    expect(out).not.toContain("Invalid Date");
+  });
+
+  it("renders a country-only result as one row", () => {
+    const out = render({
+      ...response(),
+      location: {
+        countryCode: "DE",
+        country: "Germany",
+        regionCode: null,
+        region: null,
+        city: null,
+        timeZone: null,
+      },
+    });
+
+    expect(out).toContain("Country           Germany (DE)");
+    expect(out).not.toContain("Time Zone");
+  });
+
+  it("falls back to whichever half of a name/code pair the server sent", () => {
+    const nameOnly = render(located({ countryCode: null, regionCode: null }));
+    expect(nameOnly).toContain("Country           United States");
+    expect(nameOnly).toContain("Region            California");
+
+    const codeOnly = render(located({ country: null, region: null }));
+    expect(codeOnly).toContain("Country           US");
+    expect(codeOnly).toContain("Region            CA");
+  });
+
+  /** An older server omits the key entirely; a newer one can send null for an unlocatable address. */
+  it("shows no Location section at all when the server sent none", () => {
+    for (const data of [response(), { ...response(), location: null }]) {
+      const out = render(data);
+      expect(out).not.toContain("Location");
+      expect(out).not.toContain("Country");
+      expect(out).not.toContain("Time Zone");
+      expect(out).not.toContain("undefined");
+      expect(out).toContain("Network");
+      expect(out).toContain("Signals");
+    }
+  });
+
+  /** A present-but-entirely-empty object is still nothing to say - no heading over blank rows. */
+  it("shows no Location section when every field came back null", () => {
+    const out = render(
+      located({
+        countryCode: null,
+        country: null,
+        regionCode: null,
+        region: null,
+        city: null,
+        timeZone: null,
+      }),
+    );
+
+    expect(out).not.toContain("Location");
+  });
+});
+
+describe("Risk Reasons section", () => {
+  it("renders a single reason with its severity", () => {
+    const out = render(
+      explained([{ code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" }]),
+    );
+
+    expect(out).toContain("Risk Reasons");
+    expect(out).toContain("Residential Proxy Detected    high");
+  });
+
+  it("renders every reason the server sent, in the server's order", () => {
+    const out = render(
+      explained([
+        { code: "VERIFIED_SEARCH_CRAWLER", category: "identity", severity: "info" },
+        { code: "PUBLIC_INFRASTRUCTURE", category: "network", severity: "info" },
+      ]),
+    );
+
+    expect(out).toContain("Verified Search Crawler");
+    expect(out).toContain("Public Infrastructure");
+    expect(out.indexOf("Verified Search Crawler")).toBeLessThan(out.indexOf("Public Infrastructure"));
+  });
+
+  it("is placed under the risk summary it explains, above Network", () => {
+    const out = render(
+      explained([{ code: "VPN_DETECTED", category: "anonymity", severity: "medium" }]),
+    );
+
+    expect(out.indexOf("Assessment")).toBeLessThan(out.indexOf("Risk Reasons"));
+    expect(out.indexOf("Risk Reasons")).toBeLessThan(out.indexOf("Network"));
+  });
+
+  /** The ordinary case: an unremarkable address must not gain an empty heading. */
+  it("shows no section for an empty list or a server that predates the field", () => {
+    for (const data of [explained([]), explained(undefined)]) {
+      const out = render(data);
+      expect(out).not.toContain("Risk Reasons");
+      expect(out).not.toContain("undefined");
+      expect(out).toContain("Network");
+    }
+  });
+
+  /**
+   * The server's vocabulary is additive. An unrecognised code is rendered, never dropped, and never
+   * relabelled "Unknown" - and an unrecognised severity must not reach the colour switch as a hole.
+   */
+  it("renders an unknown code and an unknown severity without throwing", () => {
+    const out = render(
+      explained([
+        { code: "NEW_FUTURE_NETWORK_SIGNAL", category: "network", severity: "info" },
+        { code: "SOMETHING_NEW", category: "future_category", severity: "future_level" },
+      ]),
+    );
+
+    expect(out).toContain("New Future Network Signal");
+    expect(out).toContain("Something New");
+    expect(out).toContain("future_level");
+    expect(out).not.toContain("Unknown Reason");
+  });
+
+  /**
+   * Reasons are server-owned facts. `flags.tor === true` says the address is Tor, not that it is an
+   * *exit* node - only the server can say which, and the CLI must not upgrade one to the other.
+   */
+  it("shows TOR_RELAY as Tor Relay and never as an exit node", () => {
+    const out = render({
+      ...explained([{ code: "TOR_RELAY", category: "anonymity", severity: "medium" }]),
+      flags: { ...response().flags, tor: true },
+    });
+
+    expect(out).toContain("Tor               Yes");
+    expect(out).toContain("Tor Relay");
+    expect(out).not.toContain("Tor Exit Node");
+  });
+
+  it("shows TOR_EXIT_NODE only when the server actually said so", () => {
+    const out = render({
+      ...explained([{ code: "TOR_EXIT_NODE", category: "anonymity", severity: "high" }]),
+      flags: { ...response().flags, tor: true },
+    });
+
+    expect(out).toContain("Tor Exit Node");
+  });
+
+  /**
+   * A residential address whose server-sent reason is RESIDENTIAL_NETWORK renders that reason - but
+   * the CLI never invents it from `network.type === "residential"`, which is why the reasons-free
+   * counterpart above shows no section at all.
+   */
+  it("renders an explanatory, non-threatening reason as an ordinary row", () => {
+    const out = render({
+      ...explained([{ code: "RESIDENTIAL_NETWORK", category: "network", severity: "info" }]),
+      network: { ...response().network, type: "residential" },
+      flags: { ...response().flags, proxy: false, proxyType: null },
+    });
+
+    expect(out).toContain("Residential Network");
+    expect(out).toContain("info");
+    expect(out).toContain("Proxy             No");
+    expect(out).toContain("Proxy Type        -");
+  });
+
+  /** The human label is terminal decoration; it must never replace the machine code elsewhere. */
+  it("does not print the raw screaming-snake code for a documented reason", () => {
+    const out = render(
+      explained([{ code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" }]),
+    );
+
+    expect(out).not.toContain("RESIDENTIAL_PROXY_DETECTED");
+  });
+});
+
+/**
+ * The full P0 shape, and the consistency case fixed in the previous release: a verified crawler
+ * whose network profile, identity rows and reasons must all agree.
+ */
+describe("verified crawler with location and reasons", () => {
+  function crawler(): IpRiskResponse {
+    return {
+      requestId: "req_crawler12345",
+      risk: {
+        index: 95,
+        band: "excellent",
+        assessmentGrade: "complete",
+        reasons: [
+          { code: "VERIFIED_SEARCH_CRAWLER", category: "identity", severity: "info" },
+          { code: "PUBLIC_INFRASTRUCTURE", category: "network", severity: "info" },
+        ],
+      },
+      network: {
+        type: "public_infrastructure",
+        profile: "search_crawler",
+        service: "Googlebot",
+        connectionType: "direct",
+        asn: "AS15169",
+        organization: "Google LLC",
+      },
+      location: {
+        countryCode: "US",
+        country: "United States",
+        regionCode: "CA",
+        region: "California",
+        city: "Mountain View",
+        timeZone: "America/Los_Angeles",
+      },
+      flags: {
+        proxy: false,
+        proxyType: null,
+        vpn: false,
+        tor: false,
+        datacenter: false,
+        scanner: null,
+        abuse: false,
+        searchCrawler: true,
+        searchCrawlerName: "Googlebot",
+      },
+    };
+  }
+
+  it("shows profile, service, reasons and identity consistently", () => {
+    const out = render(crawler());
+
+    expect(out).toContain("Profile           search_crawler");
+    expect(out).toContain("Service           Googlebot");
+    expect(out).toContain("Verified Search Crawler");
+    expect(out).toContain("Public Infrastructure");
+    expect(out).toContain("Search Crawler    Yes");
+    expect(out).toContain("Crawler           Googlebot");
+    expect(out).toContain("City              Mountain View");
+  });
+
+  /** Identity is not risk: info-severity reasons must not turn unrelated signals into warnings. */
+  it("leaves the tri-state signals untouched", () => {
+    const out = render(crawler());
+
+    expect(out).toContain("Proxy             No");
+    expect(out).toContain("Proxy Type        -");
+    expect(out).toContain("Scanner           Unknown");
+    expect(out).toContain("Index             95");
+    expect(out).toContain("Band              excellent");
   });
 });

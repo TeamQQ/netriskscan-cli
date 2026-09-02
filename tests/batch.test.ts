@@ -216,4 +216,110 @@ describe("batch without an API key", () => {
     expect(out).not.toContain("Anonymous trial");
     expect(out).toContain("1 succeeded, 0 failed");
   });
+
+  function p0Body(): Record<string, unknown> {
+    return {
+      requestId: "req_abc12345678",
+      risk: {
+        index: 42,
+        band: "poor",
+        assessmentGrade: "complete",
+        reasons: [
+          { code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" },
+          { code: "NEW_FUTURE_NETWORK_SIGNAL", category: "future_category", severity: "info" },
+        ],
+      },
+      network: {
+        type: "residential",
+        connectionType: "proxied",
+        asn: "AS123",
+        organization: "Example ISP",
+      },
+      location: {
+        countryCode: "US",
+        country: "United States",
+        regionCode: "CA",
+        region: "California",
+        city: "Los Angeles",
+        timeZone: "America/Los_Angeles",
+      },
+      flags: {
+        proxy: true,
+        proxyType: "residential_proxy",
+        vpn: false,
+        tor: false,
+        datacenter: false,
+        scanner: false,
+        abuse: false,
+      },
+    };
+  }
+
+  /**
+   * JSONL is passthrough: the envelope is the CLI's, everything under `result` is the server's
+   * response verbatim - including reason codes in their raw machine form, never the human labels
+   * the default table and `check` print.
+   */
+  it("carries location and risk.reasons through JSONL untouched", async () => {
+    const body = p0Body();
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const jsonl = await runBatch(["batch", ipsFile("5.6.7.10"), "--jsonl"]);
+    const line = JSON.parse(jsonl.trim()) as { ip: string; ok: boolean; result: unknown };
+
+    expect(line.ip).toBe("5.6.7.10");
+    expect(line.ok).toBe(true);
+    expect(line.result).toEqual(body);
+    expect(jsonl).toContain("RESIDENTIAL_PROXY_DETECTED");
+    expect(jsonl).toContain("NEW_FUTURE_NETWORK_SIGNAL");
+    expect(jsonl).not.toContain("Residential Proxy Detected");
+  });
+
+  /**
+   * The table stays readable: P0 adds no Country/Region/City/Reason columns, and the full data is
+   * reached through --jsonl instead.
+   */
+  it("does not widen the default table with location or reason columns", async () => {
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, p0Body()));
+
+    const table = await runBatch(["batch", ipsFile("5.6.7.11")]);
+
+    expect(table).toContain("Proxy Type");
+    expect(table).not.toContain("Country");
+    expect(table).not.toContain("City");
+    expect(table).not.toContain("Reason");
+    expect(table).not.toContain("Severity");
+    expect(table).toContain("1 succeeded, 0 failed");
+  });
+
+  /** An old server sends neither key; the batch must behave exactly as it always did. */
+  it("renders a legacy response with no location or reasons unchanged", async () => {
+    const legacy = {
+      requestId: "req_oldserver",
+      risk: { index: 95, band: "excellent", assessmentGrade: "complete" },
+      network: {
+        type: "residential",
+        connectionType: "direct",
+        asn: "AS123",
+        organization: "ISP",
+      },
+      flags: {
+        proxy: false,
+        vpn: false,
+        tor: false,
+        datacenter: false,
+        scanner: false,
+        abuse: false,
+      },
+    };
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, legacy));
+
+    const jsonl = await runBatch(["batch", ipsFile("5.6.7.12"), "--jsonl"]);
+    const line = JSON.parse(jsonl.trim()) as { result: Record<string, unknown> };
+
+    expect(line.result).toEqual(legacy);
+    expect(line.result.location).toBeUndefined();
+    expect(jsonl).not.toContain("undefined");
+    expect(process.exitCode).toBe(ExitCode.Success);
+  });
 });

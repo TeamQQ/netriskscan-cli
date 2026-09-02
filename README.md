@@ -22,6 +22,10 @@ Index             97
 Band              excellent
 Assessment        complete
 
+Risk Reasons
+Verified Search Crawler       info
+Public Infrastructure         info
+
 Network
 Type              public_infrastructure
 Profile           search_crawler
@@ -29,6 +33,12 @@ Service           Applebot
 Connection        direct
 ASN               AS714
 Organization      Apple Inc.
+
+Location
+Country           United States (US)
+Region            California (CA)
+City              Cupertino
+Time Zone         America/Los_Angeles
 
 Signals
 Proxy             No
@@ -68,7 +78,9 @@ threat data changes.
 - Known infrastructure identification for services such as search crawlers and public
   infrastructure, instead of treating every address as a generic business or datacenter IP
 - Proxy, VPN, Tor, abuse, blacklist and threat signals
-- One normalized NetRiskScan Index instead of raw provider scores
+- Network-level IP geolocation (country, region, city, time zone)
+- Public risk reasons: the server's own explanation of *why* an address scored as it did
+- One normalized NetRiskScan Index instead of raw provider scores - higher is cleaner
 - `unknown` and `not applicable` states are preserved, never collapsed into "false"
 - Anonymous daily trial: run your first check with no account, no key, no configuration
 - Human-readable CLI output plus JSON / JSONL for scripts, batches and CI
@@ -126,6 +138,10 @@ This is a read-only diagnostic tool. It does not make decisions for you, and the
 never recomputes or approximates a risk score client-side - the `risk.index` returned by
 the server is always the single source of truth.
 
+**A higher NetRiskScan Index means a cleaner address, not a riskier one.** `95` is
+`excellent`; `42` is `poor`. It is a cleanliness score, not a threat score - never read
+`90` as "high risk".
+
 ## Features
 
 - `check` and `batch` with no API key at all, via the anonymous daily trial
@@ -133,6 +149,7 @@ the server is always the single source of truth.
 - IPv4 and IPv6 support
 - Proxy type classification (residential, ISP, mobile, datacenter) for detected proxies,
   and verified search crawler identity (Googlebot, Bingbot, Applebot, ...)
+- IP geolocation and server-generated risk reasons in `check`, `--json` and `--jsonl`
 - Human-readable terminal output, `--json`, and `--jsonl` (batch) modes
 - Correct three-state handling of risk flags (`true` / `false` / `null` - never coerced)
 - CI-friendly exit codes and `--fail-below` / `--fail-on` policy gates
@@ -277,11 +294,18 @@ Index             92
 Band              excellent
 Assessment        complete
 
+Risk Reasons
+Public Infrastructure         info
+
 Network
 Type              public_infrastructure
 Connection        direct
 ASN               AS13335
 Organization      Cloudflare, Inc.
+
+Location
+Country           United States (US)
+Time Zone         America/Los_Angeles
 
 Signals
 Proxy             No
@@ -328,6 +352,70 @@ enumerates crawler names locally. **The CLI does not perform crawler verificatio
 itself; it only displays the classification the API already returned.** A verified
 crawler is identity information, not a risk signal, so it never affects `risk.index`,
 `--fail-on`, or the CLI's exit code.
+
+### Risk Reasons
+
+`risk.reasons` is the server's own explanation of the assessment it just returned - the
+CLI renders it and **never derives, infers, or invents a reason** from the flags it can
+see. `flags.tor: true` is not enough to claim `TOR_EXIT_NODE`; only the server can say
+whether an address is an exit node or an ordinary relay, and the CLI prints whichever it
+actually sent.
+
+```text
+Risk Reasons
+Residential Proxy Detected    high
+```
+
+Reasons are **not proof of fraud or malicious activity**. `VPN_DETECTED` means a VPN was
+detected, nothing more. Nor are they all negative: `VERIFIED_SEARCH_CRAWLER`,
+`PUBLIC_INFRASTRUCTURE` and `RESIDENTIAL_NETWORK` are exactly the reasons an address
+scores *well*, which is why the block is called `Risk Reasons` and not "threats".
+
+```text
+Risk Reasons
+Verified Search Crawler       info
+Public Infrastructure         info
+```
+
+Each reason carries a `code`, a `category` and a `severity`. The default output shows a
+readable label (`Residential Proxy Detected`) and the severity; `--json` / `--jsonl`
+always carry the raw machine values (`RESIDENTIAL_PROXY_DETECTED`, `anonymity`, `high`).
+The vocabulary is **additive** - the API can introduce new codes at any time, and an
+already-installed CLI renders an unfamiliar one rather than failing or hiding it.
+
+Reasons are display-only: they never affect `risk.index`, `--fail-below`, `--fail-on`, or
+the exit code. A server that predates the field simply omits it, and the section is not
+shown when there is nothing to explain.
+
+### Location
+
+`location` is **network-level IP geolocation**: where the address is registered and
+routed. It is **not** device or GPS location, and not the precise physical location of
+whoever is using the address - a city can be the operator's aggregation point rather than
+the user's town.
+
+```text
+Location
+Country           United States (US)
+Region            California (CA)
+City              Mountain View
+Time Zone         America/Los_Angeles
+```
+
+Every field is independently optional. Geo resolution is often partial, and the CLI shows
+only what the server actually resolved rather than padding the block with placeholders -
+a country-only result prints one row, and an address with no location at all prints no
+`Location` section at all:
+
+```text
+Location
+Country           Germany (DE)
+Time Zone         Europe/Berlin
+```
+
+Names and codes are server-owned strings, printed verbatim: never translated,
+re-capitalized, or derived from one another. `location` has no effect on the risk
+assessment or on any exit code.
 
 ### Addresses that can't be scored
 
@@ -481,13 +569,30 @@ coerced to `false`, `0`, or a string):
 
 ```json
 {
-  "requestId": "req_8f3ab21c9d",
-  "risk": { "index": 72, "band": "good", "assessmentGrade": "complete" },
+  "requestId": "req_example",
+  "risk": {
+    "index": 95,
+    "band": "excellent",
+    "assessmentGrade": "complete",
+    "reasons": [
+      { "code": "VERIFIED_SEARCH_CRAWLER", "category": "identity", "severity": "info" }
+    ]
+  },
   "network": {
-    "type": "residential",
-    "connectionType": "isp",
-    "asn": "AS4134",
-    "organization": "China Telecom"
+    "type": "public_infrastructure",
+    "profile": "search_crawler",
+    "service": "Googlebot",
+    "connectionType": "direct",
+    "asn": "AS15169",
+    "organization": "Google LLC"
+  },
+  "location": {
+    "countryCode": "US",
+    "country": "United States",
+    "regionCode": "CA",
+    "region": "California",
+    "city": "Mountain View",
+    "timeZone": "America/Los_Angeles"
   },
   "flags": {
     "proxy": false,
@@ -495,19 +600,20 @@ coerced to `false`, `0`, or a string):
     "vpn": false,
     "tor": false,
     "datacenter": false,
-    "scanner": false,
+    "scanner": null,
     "abuse": false,
-    "searchCrawler": false,
-    "searchCrawlerName": null
+    "searchCrawler": true,
+    "searchCrawlerName": "Googlebot"
   }
 }
 ```
 
-`flags.proxyType` (when `flags.proxy` is `true`), `flags.searchCrawler`, and
-`flags.searchCrawlerName` carry the server's raw machine values in `--json`/`--jsonl` -
-e.g. `"residential_proxy"`, never the `Residential Proxy` label shown in the default
-terminal output. A server that predates these fields simply omits the keys; the CLI
-does not synthesize them.
+`risk.reasons`, `location`, `flags.proxyType` (when `flags.proxy` is `true`),
+`flags.searchCrawler`, and `flags.searchCrawlerName` carry the server's raw machine values
+in `--json`/`--jsonl` - e.g. `"RESIDENTIAL_PROXY_DETECTED"` and `"residential_proxy"`,
+never the `Residential Proxy Detected` / `Residential Proxy` labels shown in the default
+terminal output. A server that predates these fields simply omits the keys; the CLI does
+not synthesize them.
 
 In `--json` mode there is no spinner, no ANSI color, and no banner - stdout carries only
 the JSON. Errors always go to stderr, so this composes cleanly:
@@ -525,7 +631,7 @@ netriskscan batch ips.txt --jsonl
 One JSON object per line, one line per input IP:
 
 ```json
-{"ip":"1.1.1.1","ok":true,"result":{"requestId":"req_...","risk":{...},"network":{...},"flags":{...}}}
+{"ip":"1.1.1.1","ok":true,"result":{"requestId":"req_...","risk":{...,"reasons":[...]},"network":{...},"location":{...},"flags":{...}}}
 {"ip":"8.8.8.8","ok":true,"result":{...}}
 {"ip":"bad-ip","ok":false,"error":{"code":"invalid_ip","message":"..."}}
 ```
@@ -533,6 +639,11 @@ One JSON object per line, one line per input IP:
 Designed for `netriskscan batch ips.txt --jsonl > results.jsonl` and downstream
 line-oriented processing (`jq`, `grep`, log pipelines, etc.). A failed IP never causes
 the whole batch to fail or drops output for the rest.
+
+The envelope (`ip`, `ok`, `result` / `error`) belongs to the CLI; everything under
+`result` is the API response verbatim, so `location` and `risk.reasons` appear there
+untouched. The default batch table deliberately stays narrow - it grows no country, city
+or reason columns - so use `--jsonl` when you need the full record.
 
 ## CI/CD
 
@@ -718,6 +829,24 @@ try {
 const usage = await client.getUsage();
 console.log(usage.data.units.remaining);
 ```
+
+The response types are exported too, including `IpLocation` and `RiskReason`:
+
+```ts
+import type { IpRiskResponse, IpLocation, RiskReason } from "netriskscan-cli";
+
+const { data } = await client.checkIp("66.249.87.5");
+
+for (const reason of data.risk.reasons ?? []) {
+  console.log(reason.code, reason.severity);
+}
+console.log(data.location?.country ?? "unknown");
+```
+
+Both are optional on `IpRiskResponse`, and every field inside `IpLocation` is nullable: an
+older server omits them entirely, and a newer one can resolve a country without a city.
+`RiskReason.code` / `category` / `severity` are plain `string`s on purpose, so a reason
+code added server-side after your build still type-checks and still renders.
 
 See [examples/](examples/) for runnable scripts.
 

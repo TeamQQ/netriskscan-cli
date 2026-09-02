@@ -16,6 +16,16 @@ try {
   console.log("band:", data.risk.band);
   console.log("vpn:", data.flags.vpn); // true | false | null - never coerced
 
+  // Both are optional: an older server omits them, and a newer one can send a location with
+  // only some fields resolved. Reasons are the server's own explanation - never derived here.
+  for (const reason of data.risk.reasons ?? []) {
+    console.log("reason:", reason.code, `(${reason.category}, ${reason.severity})`);
+  }
+  if (data.location) {
+    console.log("country:", data.location.country ?? data.location.countryCode ?? "unknown");
+    console.log("city:", data.location.city ?? "unknown");
+  }
+
   if (data.usage?.mode === "anonymous") {
     // Printed exactly as the server reported it - never dailyLimit - used.
     console.log("available:", data.usage.remaining, "of", data.usage.dailyLimit);

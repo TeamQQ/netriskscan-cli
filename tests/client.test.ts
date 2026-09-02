@@ -444,3 +444,172 @@ describe("NetRiskScanClient", () => {
     expect(url).toBe("https://api.netriskscan.com/v1/usage");
   });
 });
+
+/**
+ * `location` and `risk.reasons` arrive inside the existing `GET /v1/ip-risk/{ip}` payload. The
+ * client is transport only: it parses whatever the server sent, adds no second call, and never
+ * fills a gap in with a value of its own.
+ */
+describe("location and risk.reasons", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const location = {
+    countryCode: "US",
+    country: "United States",
+    regionCode: "CA",
+    region: "California",
+    city: "Los Angeles",
+    timeZone: "America/Los_Angeles",
+  };
+
+  it("returns a full new-server payload unchanged", async () => {
+    const body = successBody({
+      requestId: "req_newserver",
+      risk: {
+        index: 42,
+        band: "poor",
+        assessmentGrade: "complete",
+        reasons: [
+          { code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" },
+        ],
+      },
+      network: {
+        type: "residential",
+        connectionType: "proxied",
+        asn: "AS123",
+        organization: "Example ISP",
+      },
+      location,
+      flags: {
+        proxy: true,
+        proxyType: "residential_proxy",
+        vpn: false,
+        tor: false,
+        datacenter: false,
+        scanner: false,
+        abuse: false,
+      },
+    });
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const { data } = await new NetRiskScanClient().checkIp("203.0.113.10");
+
+    expect(data).toEqual(body);
+    expect(data.location).toEqual(location);
+    expect(data.risk.reasons).toEqual([
+      { code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" },
+    ]);
+  });
+
+  /** One endpoint, one request: there is no separate geo or reasons call to make. */
+  it("fetches everything in the single GET /v1/ip-risk/{ip} call", async () => {
+    const fetchMock = vi
+      .mocked(fetch)
+      .mockResolvedValue(mockResponse(200, successBody({ location })));
+
+    await new NetRiskScanClient().checkIp("1.1.1.1");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.netriskscan.com/v1/ip-risk/1.1.1.1");
+  });
+
+  /** An older server omits both keys; the CLI must parse the response and invent neither. */
+  it("does not throw on an old response that omits location and reasons", async () => {
+    const legacy = {
+      requestId: "req_oldserver",
+      risk: { index: 95, band: "excellent", assessmentGrade: "complete" },
+      network: {
+        type: "residential",
+        connectionType: "direct",
+        asn: "AS123",
+        organization: "ISP",
+      },
+      flags: {
+        proxy: false,
+        vpn: false,
+        tor: false,
+        datacenter: false,
+        scanner: false,
+        abuse: false,
+      },
+    };
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, legacy));
+
+    const { data } = await new NetRiskScanClient().checkIp("8.8.8.8");
+
+    expect(data).toEqual(legacy);
+    expect(data.location).toBeUndefined();
+    expect(data.risk.reasons).toBeUndefined();
+  });
+
+  /** Partial geo is normal, and an explicit null must survive as null rather than becoming "". */
+  it("preserves a partially resolved location exactly as sent", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(
+        200,
+        successBody({
+          location: {
+            countryCode: "DE",
+            country: "Germany",
+            regionCode: null,
+            region: null,
+            city: null,
+            timeZone: "Europe/Berlin",
+          },
+        }),
+      ),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+    expect(data.location?.country).toBe("Germany");
+    expect(data.location?.city).toBeNull();
+    expect(data.location?.timeZone).toBe("Europe/Berlin");
+  });
+
+  it("preserves an explicit null location and an empty reasons array", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(
+        200,
+        successBody({
+          location: null,
+          risk: { index: 88, band: "good", assessmentGrade: "complete", reasons: [] },
+        }),
+      ),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+    expect(data.location).toBeNull();
+    expect(data.risk.reasons).toEqual([]);
+  });
+
+  /**
+   * The reason vocabulary is additive server-side. A code, category or severity this build has
+   * never heard of has to survive the client untouched - not be dropped, coerced, or thrown on.
+   */
+  it("passes an unknown reason code, category and severity straight through", async () => {
+    const reasons = [
+      { code: "NEW_FUTURE_NETWORK_SIGNAL", category: "network", severity: "info" },
+      { code: "SOMETHING_NEW", category: "future_category", severity: "future_level" },
+    ];
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(
+        200,
+        successBody({ risk: { index: 70, band: "good", assessmentGrade: "complete", reasons } }),
+      ),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+    expect(data.risk.reasons).toEqual(reasons);
+  });
+});

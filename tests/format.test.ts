@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatGeoName,
   formatIndex,
   formatNullable,
   formatOrDash,
   formatProxyType,
   formatProxyTypeCompact,
+  formatRiskReasonCode,
   formatTriState,
 } from "../src/output/format.js";
 
@@ -72,4 +74,82 @@ describe("formatOrDash", () => {
   it("null -> -", () => expect(formatOrDash(null)).toBe("-"));
   it("undefined -> -", () => expect(formatOrDash(undefined)).toBe("-"));
   it("empty string -> -", () => expect(formatOrDash("")).toBe("-"));
+});
+
+describe("formatGeoName", () => {
+  it("name + code -> Name (CODE)", () => {
+    expect(formatGeoName("United States", "US")).toBe("United States (US)");
+    expect(formatGeoName("California", "CA")).toBe("California (CA)");
+  });
+
+  /** The server owns both halves independently; a missing one is simply not printed. */
+  it("name only -> name", () => expect(formatGeoName("United States", null)).toBe("United States"));
+  it("code only -> code", () => expect(formatGeoName(null, "US")).toBe("US"));
+
+  /** undefined, not "N/A": the caller drops the row rather than claiming the server said nothing. */
+  it("neither -> undefined", () => {
+    expect(formatGeoName(null, null)).toBeUndefined();
+    expect(formatGeoName(undefined, undefined)).toBeUndefined();
+    expect(formatGeoName("", "")).toBeUndefined();
+  });
+
+  /** Server strings are display text: never re-cased, translated, or derived from the code. */
+  it("passes server strings through byte-for-byte", () => {
+    expect(formatGeoName("Köln", "NW")).toBe("Köln (NW)");
+    expect(formatGeoName("new york", "NY")).toBe("new york (NY)");
+  });
+});
+
+describe("formatRiskReasonCode", () => {
+  it("maps the documented codes to their labels", () => {
+    const cases: [string, string][] = [
+      ["RESIDENTIAL_PROXY_DETECTED", "Residential Proxy Detected"],
+      ["ISP_PROXY_DETECTED", "ISP Proxy Detected"],
+      ["MOBILE_PROXY_DETECTED", "Mobile Proxy Detected"],
+      ["DATACENTER_PROXY_DETECTED", "Datacenter Proxy Detected"],
+      ["PROXY_DETECTED", "Proxy Detected"],
+      ["VPN_DETECTED", "VPN Detected"],
+      ["TOR_RELAY", "Tor Relay"],
+      ["TOR_EXIT_NODE", "Tor Exit Node"],
+      ["KNOWN_SCANNER", "Known Scanner"],
+      ["ABUSE_ACTIVITY", "Abuse Activity"],
+      ["BLACKLIST_MATCH", "Blacklist Match"],
+      ["BOTNET_C2", "Botnet C2"],
+      ["COMPROMISED_HOST", "Compromised Host"],
+      ["VERIFIED_SEARCH_CRAWLER", "Verified Search Crawler"],
+      ["PUBLIC_INFRASTRUCTURE", "Public Infrastructure"],
+      ["RESIDENTIAL_NETWORK", "Residential Network"],
+      ["CONFLICTING_EVIDENCE", "Conflicting Evidence"],
+      ["INSUFFICIENT_EVIDENCE", "Insufficient Evidence"],
+    ];
+    for (const [code, label] of cases) {
+      expect(formatRiskReasonCode(code)).toBe(label);
+    }
+  });
+
+  /**
+   * The reason vocabulary is additive server-side. A CLI already installed when a new code ships
+   * must render it, not throw, drop it, or hide it behind "Unknown".
+   */
+  it("title-cases a code it has never seen instead of throwing", () => {
+    expect(() => formatRiskReasonCode("NEW_FUTURE_REASON")).not.toThrow();
+    expect(formatRiskReasonCode("NEW_FUTURE_REASON")).toBe("New Future Reason");
+    expect(formatRiskReasonCode("NEW_FUTURE_NETWORK_SIGNAL")).toBe("New Future Network Signal");
+    expect(formatRiskReasonCode("SOMETHING_NEW")).toBe("Something New");
+  });
+
+  it("survives degenerate values without throwing", () => {
+    expect(formatRiskReasonCode("")).toBe("-");
+    expect(formatRiskReasonCode(null)).toBe("-");
+    expect(formatRiskReasonCode(undefined)).toBe("-");
+    expect(formatRiskReasonCode("_")).toBe("_");
+    expect(formatRiskReasonCode("SINGLE")).toBe("Single");
+  });
+
+  /** The label is terminal decoration only - it must never leak into --json/--jsonl. */
+  it("never mutates the code it was given", () => {
+    const code = "RESIDENTIAL_PROXY_DETECTED";
+    formatRiskReasonCode(code);
+    expect(code).toBe("RESIDENTIAL_PROXY_DETECTED");
+  });
 });
