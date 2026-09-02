@@ -3,6 +3,20 @@ export type RiskBand = "excellent" | "good" | "fair" | "poor" | "high_risk" | "u
 export type AssessmentGrade = "complete" | "partial" | "limited" | "insufficient";
 
 /**
+ * Server classification of an address already flagged `proxy: true` - a documented, closed set of
+ * the subtypes the server currently emits. Unlike `network.type`/`profile`, this is kept as a real
+ * union rather than `string` because the CLI's own formatter needs to switch on it; that formatter
+ * still renders an unrecognised raw value verbatim instead of throwing, since a runtime response is
+ * never actually guaranteed to match this compile-time type.
+ */
+export type ProxyType =
+  | "residential_proxy"
+  | "isp_proxy"
+  | "mobile_proxy"
+  | "datacenter_proxy"
+  | "unknown_proxy";
+
+/**
  * Response of `GET /v1/ip-risk/{ip}`.
  *
  * `network.type` / `network.connectionType` are intentionally `string | null`
@@ -39,11 +53,31 @@ export interface IpRiskResponse {
   };
   flags: {
     proxy: boolean | null;
+    /**
+     * Subtype of an address already flagged `proxy: true`. `null` when not applicable or not
+     * determined. Absent (key omitted) on a server that predates this field - read defensively,
+     * the same way {@link IpRiskResponse.network}'s `profile`/`service` already are.
+     */
+    proxyType?: ProxyType | null;
+
     vpn: boolean | null;
     tor: boolean | null;
     datacenter: boolean | null;
     scanner: boolean | null;
     abuse: boolean | null;
+
+    /**
+     * Whether the server has verified this address as a known search engine crawler. Absent on a
+     * server that predates this field - read defensively.
+     */
+    searchCrawler?: boolean | null;
+    /**
+     * Canonical crawler display name, e.g. `"Googlebot"`, `"Bingbot"`, `"Applebot"` - server-owned
+     * and shown verbatim, never reformatted. Deliberately `string`, not a closed union: the server
+     * adds crawlers as new sources are onboarded, and an unrecognised one must still render, not
+     * throw. Absent on a server that predates this field - read defensively.
+     */
+    searchCrawlerName?: string | null;
   };
   /**
    * Access mode and, for the anonymous trial, how much of today's allowance is left.

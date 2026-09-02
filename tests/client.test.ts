@@ -246,6 +246,89 @@ describe("NetRiskScanClient", () => {
     expect(unassessed.data.risk.index).toBeNull();
   });
 
+  describe("proxyType / searchCrawler / searchCrawlerName", () => {
+    const baseFlags = {
+      proxy: false,
+      vpn: false,
+      tor: false,
+      datacenter: false,
+      scanner: false,
+      abuse: false,
+    };
+
+    it("parses a residential proxy classification", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(
+          200,
+          successBody({ flags: { ...baseFlags, proxy: true, proxyType: "residential_proxy" } }),
+        ),
+      );
+      const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+      expect(data.flags.proxy).toBe(true);
+      expect(data.flags.proxyType).toBe("residential_proxy");
+    });
+
+    it("parses a datacenter proxy classification", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(
+          200,
+          successBody({ flags: { ...baseFlags, proxy: true, proxyType: "datacenter_proxy" } }),
+        ),
+      );
+      const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+      expect(data.flags.proxyType).toBe("datacenter_proxy");
+    });
+
+    it("parses a verified search crawler identity", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(
+          200,
+          successBody({
+            flags: { ...baseFlags, searchCrawler: true, searchCrawlerName: "Googlebot" },
+          }),
+        ),
+      );
+      const { data } = await new NetRiskScanClient().checkIp("66.249.66.1");
+
+      expect(data.flags.searchCrawler).toBe(true);
+      expect(data.flags.searchCrawlerName).toBe("Googlebot");
+    });
+
+    /**
+     * The regression this whole feature hinges on: a server that predates proxyType /
+     * searchCrawler / searchCrawlerName omits the keys entirely, and the CLI must still parse the
+     * response without throwing.
+     */
+    it("does not throw on an old response that omits the new fields entirely", async () => {
+      vi.mocked(fetch).mockResolvedValue(mockResponse(200, successBody()));
+
+      const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+      expect(data.flags.proxyType).toBeUndefined();
+      expect(data.flags.searchCrawler).toBeUndefined();
+      expect(data.flags.searchCrawlerName).toBeUndefined();
+    });
+
+    it("preserves an explicit null for each new field rather than coercing it", async () => {
+      vi.mocked(fetch).mockResolvedValue(
+        mockResponse(
+          200,
+          successBody({
+            flags: { ...baseFlags, proxyType: null, searchCrawler: null, searchCrawlerName: null },
+          }),
+        ),
+      );
+
+      const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+      expect(data.flags.proxyType).toBeNull();
+      expect(data.flags.searchCrawler).toBeNull();
+      expect(data.flags.searchCrawlerName).toBeNull();
+    });
+  });
+
   it.each([400, 401, 403, 404])("does not retry on HTTP %d", async (status) => {
     const fetchMock = vi
       .mocked(fetch)

@@ -154,6 +154,46 @@ describe("batch without an API key", () => {
     expect(out).toContain("40 succeeded, 0 failed");
   });
 
+  function residentialProxyBody(): Record<string, unknown> {
+    return {
+      requestId: "req_abc12345678",
+      risk: { index: 61, band: "fair", assessmentGrade: "complete" },
+      network: { type: "residential", connectionType: "proxy", asn: "AS1", organization: "ISP" },
+      flags: {
+        proxy: true,
+        proxyType: "residential_proxy",
+        vpn: false,
+        tor: false,
+        datacenter: false,
+        scanner: false,
+        abuse: false,
+        searchCrawler: false,
+        searchCrawlerName: null,
+      },
+    };
+  }
+
+  it("includes Proxy Type and Crawler columns in the human table", async () => {
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, residentialProxyBody()));
+
+    const table = await runBatch(["batch", ipsFile("5.6.7.8")]);
+
+    expect(table).toContain("Proxy Type");
+    expect(table).toContain("Residential");
+    expect(table).toContain("Crawler");
+  });
+
+  it("carries proxyType, searchCrawler and searchCrawlerName through JSONL output", async () => {
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, residentialProxyBody()));
+
+    const jsonl = await runBatch(["batch", ipsFile("5.6.7.9"), "--jsonl"]);
+    const line = JSON.parse(jsonl.trim()) as { result: { flags: Record<string, unknown> } };
+
+    expect(line.result.flags.proxyType).toBe("residential_proxy");
+    expect(line.result.flags.searchCrawler).toBe(false);
+    expect(line.result.flags.searchCrawlerName).toBeNull();
+  });
+
   it("prints no anonymous summary when the server reported no anonymous usage", async () => {
     vi.mocked(fetch).mockResolvedValue(
       mockResponse(200, {

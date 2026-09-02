@@ -11,6 +11,8 @@ import {
   formatIndex,
   formatNullable,
   formatNumber,
+  formatOrDash,
+  formatProxyType,
   formatTriState,
   formatUtcTimestamp,
   row,
@@ -90,11 +92,19 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
 
   lines.push(chalk.bold("Signals"));
   lines.push(row("Proxy", formatTriState(data.flags.proxy)));
+  lines.push(row("Proxy Type", formatProxyType(data.flags.proxyType)));
   lines.push(row("VPN", formatTriState(data.flags.vpn)));
   lines.push(row("Tor", formatTriState(data.flags.tor)));
   lines.push(row("Datacenter", formatTriState(data.flags.datacenter)));
   lines.push(row("Scanner", formatTriState(data.flags.scanner)));
   lines.push(row("Abuse", formatTriState(data.flags.abuse)));
+  lines.push("");
+
+  // Identity, not a risk signal: a verified crawler must never read as a threat, so it gets its own
+  // section rather than living inside Signals.
+  lines.push(chalk.bold("Identity"));
+  lines.push(row("Search Crawler", formatTriState(data.flags.searchCrawler)));
+  lines.push(row("Crawler", formatOrDash(data.flags.searchCrawlerName)));
   lines.push("");
 
   // Only for the anonymous trial. An API-key caller's allowance is a billing-period quota, a

@@ -32,11 +32,16 @@ Organization      Apple Inc.
 
 Signals
 Proxy             No
+Proxy Type        -
 VPN               No
 Tor               No
 Datacenter        No
 Scanner           Unknown
 Abuse             No
+
+Identity
+Search Crawler    Yes
+Crawler           Applebot
 
 Usage
 Available         29
@@ -126,6 +131,8 @@ the server is always the single source of truth.
 - `check` and `batch` with no API key at all, via the anonymous daily trial
 - `check`, `usage`, and client-side `batch` commands
 - IPv4 and IPv6 support
+- Proxy type classification (residential, ISP, mobile, datacenter) for detected proxies,
+  and verified search crawler identity (Googlebot, Bingbot, Applebot, ...)
 - Human-readable terminal output, `--json`, and `--jsonl` (batch) modes
 - Correct three-state handling of risk flags (`true` / `false` / `null` - never coerced)
 - CI-friendly exit codes and `--fail-below` / `--fail-on` policy gates
@@ -278,17 +285,49 @@ Organization      Cloudflare, Inc.
 
 Signals
 Proxy             No
+Proxy Type        -
 VPN               No
 Tor               No
 Datacenter        Unknown
 Scanner           No
 Abuse             No
 
+Identity
+Search Crawler    No
+Crawler           -
+
 Request ID        req_xxxxxxxx
 ```
 
 Output above is illustrative of the format - actual values always come from the live
 API response.
+
+### Proxy Type
+
+`Proxy Type` is a classification detail for an address already detected as a proxy - it
+refines `Proxy`, it does not replace it. It renders as `-`, not `Unknown`, whenever the
+address is not a proxy at all:
+
+```text
+Signals
+Proxy             Yes
+Proxy Type        Residential Proxy
+```
+
+The server-reported machine value (`residential_proxy`, `isp_proxy`, `mobile_proxy`,
+`datacenter_proxy`, `unknown_proxy`) is what `--json`/`--jsonl` carry; the CLI only maps
+it to a human-readable label (`Residential Proxy`, `ISP Proxy`, ...) in the default
+terminal output.
+
+### Search Crawler
+
+The `Identity` block shows whether the NetRiskScan API has verified this address as a
+known search engine crawler, and if so, its canonical name (`Googlebot`, `Bingbot`,
+`Applebot`, ...) exactly as the server sends it - the CLI never reformats, cases, or
+enumerates crawler names locally. **The CLI does not perform crawler verification
+itself; it only displays the classification the API already returned.** A verified
+crawler is identity information, not a risk signal, so it never affects `risk.index`,
+`--fail-on`, or the CLI's exit code.
 
 ### Addresses that can't be scored
 
@@ -452,14 +491,23 @@ coerced to `false`, `0`, or a string):
   },
   "flags": {
     "proxy": false,
+    "proxyType": null,
     "vpn": false,
     "tor": false,
     "datacenter": false,
     "scanner": false,
-    "abuse": false
+    "abuse": false,
+    "searchCrawler": false,
+    "searchCrawlerName": null
   }
 }
 ```
+
+`flags.proxyType` (when `flags.proxy` is `true`), `flags.searchCrawler`, and
+`flags.searchCrawlerName` carry the server's raw machine values in `--json`/`--jsonl` -
+e.g. `"residential_proxy"`, never the `Residential Proxy` label shown in the default
+terminal output. A server that predates these fields simply omits the keys; the CLI
+does not synthesize them.
 
 In `--json` mode there is no spinner, no ANSI color, and no banner - stdout carries only
 the JSON. Errors always go to stderr, so this composes cleanly:

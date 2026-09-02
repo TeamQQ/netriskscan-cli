@@ -19,6 +19,7 @@ export type {
   UsageResponse,
   RiskBand,
   AssessmentGrade,
+  ProxyType,
   RiskFlagName,
   ApiErrorBody,
   RateLimitInfo,

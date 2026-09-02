@@ -18,6 +18,7 @@ function render(data: IpRiskResponse): string {
 function response(
   network: Partial<IpRiskResponse["network"]> = {},
   usage?: IpRiskResponse["usage"],
+  flags: Partial<IpRiskResponse["flags"]> = {},
 ): IpRiskResponse {
   return {
     requestId: "req_test12345678",
@@ -29,7 +30,15 @@ function response(
       organization: "Apple Inc.",
       ...network,
     },
-    flags: { proxy: false, vpn: false, tor: false, datacenter: null, scanner: false, abuse: false },
+    flags: {
+      proxy: false,
+      vpn: false,
+      tor: false,
+      datacenter: null,
+      scanner: false,
+      abuse: false,
+      ...flags,
+    },
     ...(usage === undefined ? {} : { usage }),
   };
 }
@@ -132,6 +141,125 @@ describe("signals stay tri-state", () => {
 
     expect(out).toContain("Datacenter        Unknown");
     expect(out).toContain("Proxy             No");
+  });
+});
+
+describe("Proxy Type row", () => {
+  it("shows the human-readable label directly after Proxy, when the address is a proxy", () => {
+    const out = render(response({}, undefined, { proxy: true, proxyType: "residential_proxy" }));
+
+    expect(out).toContain("Proxy             Yes");
+    expect(out).toContain("Proxy Type        Residential Proxy");
+    expect(out.indexOf("Proxy ")).toBeLessThan(out.indexOf("Proxy Type"));
+  });
+
+  it("renders each documented proxy subtype", () => {
+    const cases: [IpRiskResponse["flags"]["proxyType"], string][] = [
+      ["residential_proxy", "Residential Proxy"],
+      ["isp_proxy", "ISP Proxy"],
+      ["mobile_proxy", "Mobile Proxy"],
+      ["datacenter_proxy", "Datacenter Proxy"],
+      ["unknown_proxy", "Unknown Proxy"],
+    ];
+    for (const [proxyType, label] of cases) {
+      const out = render(response({}, undefined, { proxy: true, proxyType }));
+      expect(out).toContain(`Proxy Type        ${label}`);
+    }
+  });
+
+  /** Proxy Type is a classification detail, not a signal - "not a proxy" must read as "-", not
+   * "Unknown" the way an unchecked Signals row would. */
+  it("shows - (not Unknown) when the address is not a proxy", () => {
+    const out = render(response({}, undefined, { proxy: false, proxyType: null }));
+
+    expect(out).toContain("Proxy             No");
+    expect(out).toContain("Proxy Type        -");
+  });
+
+  /** Older servers predate this field entirely; reading it must not throw or print "undefined". */
+  it("tolerates a response from a server that predates proxyType", () => {
+    const legacy = response({}, undefined, { proxy: true });
+    delete (legacy.flags as Record<string, unknown>).proxyType;
+
+    const out = render(legacy);
+
+    expect(out).not.toContain("undefined");
+    expect(out).toContain("Proxy Type        -");
+  });
+});
+
+describe("Identity section", () => {
+  it("shows a verified crawler's canonical name", () => {
+    const out = render(
+      response({}, undefined, { searchCrawler: true, searchCrawlerName: "Googlebot" }),
+    );
+
+    expect(out).toContain("Identity");
+    expect(out).toContain("Search Crawler    Yes");
+    expect(out).toContain("Crawler           Googlebot");
+  });
+
+  it("passes an unusual canonical name through unchanged", () => {
+    const out = render(
+      response({}, undefined, { searchCrawler: true, searchCrawlerName: "OAI-SearchBot" }),
+    );
+
+    expect(out).toContain("Crawler           OAI-SearchBot");
+  });
+
+  it("shows No / - for an ordinary, non-crawler address", () => {
+    const out = render(
+      response({}, undefined, { searchCrawler: false, searchCrawlerName: null }),
+    );
+
+    expect(out).toContain("Search Crawler    No");
+    expect(out).toContain("Crawler           -");
+  });
+
+  it("shows Unknown / - when the server could not determine crawler status", () => {
+    const out = render(
+      response({}, undefined, { searchCrawler: null, searchCrawlerName: null }),
+    );
+
+    expect(out).toContain("Search Crawler    Unknown");
+    expect(out).toContain("Crawler           -");
+  });
+
+  it("is placed between Signals and Request ID", () => {
+    const out = render(response({}, undefined, { searchCrawler: true, searchCrawlerName: "Googlebot" }));
+
+    expect(out.indexOf("Signals")).toBeLessThan(out.indexOf("Identity"));
+    expect(out.indexOf("Identity")).toBeLessThan(out.indexOf("Request ID"));
+  });
+
+  /** Older servers predate these fields entirely; reading them must not throw or print "undefined",
+   * and the CLI must still show the section with its Unknown/- placeholders. */
+  it("tolerates a response from a server that predates searchCrawler and searchCrawlerName", () => {
+    const legacy = response();
+    delete (legacy.flags as Record<string, unknown>).searchCrawler;
+    delete (legacy.flags as Record<string, unknown>).searchCrawlerName;
+
+    const out = render(legacy);
+
+    expect(out).not.toContain("undefined");
+    expect(out).toContain("Identity");
+    expect(out).toContain("Search Crawler    Unknown");
+    expect(out).toContain("Crawler           -");
+  });
+
+  /** A verified crawler is identity, not risk - it must never be implied dangerous even when other
+   * signals (e.g. datacenter hosting) are true for the same address. */
+  it("does not alter unrelated Signals rows for a verified crawler", () => {
+    const out = render(
+      response(
+        {},
+        undefined,
+        { searchCrawler: true, searchCrawlerName: "Googlebot", datacenter: true },
+      ),
+    );
+
+    expect(out).toContain("Datacenter        Yes");
+    expect(out).toContain("Search Crawler    Yes");
   });
 });
 

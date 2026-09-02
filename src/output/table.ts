@@ -2,7 +2,14 @@ import Table from "cli-table3";
 import chalk from "chalk";
 import type { BatchItemResult } from "../commands/batch.js";
 import { ANONYMOUS_DAILY_LIMIT_CODE } from "../client/errors.js";
-import { formatIndex, formatNumber, formatTriState, row } from "./format.js";
+import {
+  formatIndex,
+  formatNumber,
+  formatOrDash,
+  formatProxyTypeCompact,
+  formatTriState,
+  row,
+} from "./format.js";
 
 /**
  * Anonymous-trial summary for a finished batch.
@@ -42,7 +49,7 @@ function anonymousSummaryLines(results: readonly BatchItemResult[]): string[] {
 
 export function renderBatchTable(results: readonly BatchItemResult[]): void {
   const table = new Table({
-    head: ["IP", "Index", "Band", "Proxy", "VPN", "Tor", "Status"],
+    head: ["IP", "Index", "Band", "Proxy", "Proxy Type", "VPN", "Tor", "Crawler", "Status"],
     style: { head: [], border: [] },
   });
 
@@ -54,12 +61,24 @@ export function renderBatchTable(results: readonly BatchItemResult[]): void {
         formatIndex(result.risk.index),
         result.risk.band ?? "N/A",
         formatTriState(result.flags.proxy),
+        formatProxyTypeCompact(result.flags.proxyType),
         formatTriState(result.flags.vpn),
         formatTriState(result.flags.tor),
+        formatOrDash(result.flags.searchCrawlerName),
         chalk.green("ok"),
       ]);
     } else {
-      table.push([item.ip, "-", "-", "-", "-", "-", chalk.red(`error: ${item.error.code}`)]);
+      table.push([
+        item.ip,
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        chalk.red(`error: ${item.error.code}`),
+      ]);
     }
   }
 
