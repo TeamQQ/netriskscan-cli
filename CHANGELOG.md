@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.4.0...v1.5.0) (2026-09-02)
+
+
+### Features
+
+* add geolocation and risk reasons to CLI ([7a47c02](https://github.com/TeamQQ/netriskscan-cli/commit/7a47c022c70ca108025edee7c24b9b851cbe8bde))
+
 ## Unreleased
 
 ### Added
