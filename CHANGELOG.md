@@ -5,9 +5,7 @@
 
 * add geolocation and risk reasons to CLI ([7a47c02](https://github.com/TeamQQ/netriskscan-cli/commit/7a47c022c70ca108025edee7c24b9b851cbe8bde))
 
-## Unreleased
-
-### Added
+### Details
 
 - IP geolocation output for `check` (`Location`: country, region, city, time zone), shown
   only for the fields the server actually resolved
