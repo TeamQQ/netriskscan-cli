@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.3.0...v1.4.0) (2026-09-02)
+
+
+### Features
+
+* **check:** show proxy type and verified search crawler identity ([4386353](https://github.com/TeamQQ/netriskscan-cli/commit/43863534b3d51bb8ce7ba22ac5b0b07fc03c48ee))
+
 # [1.3.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.2.0...v1.3.0) (2026-08-28)
 
 
