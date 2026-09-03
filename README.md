@@ -1,7 +1,8 @@
 # NetRiskScan CLI
 
-The official command-line client and TypeScript SDK for [NetRiskScan](https://www.netriskscan.com) -
-IP reputation, risk assessment, and network intelligence directly from your terminal.
+Command-line client and TypeScript SDK for [NetRiskScan](https://www.netriskscan.com): IP
+reputation, proxy/VPN/Tor and datacenter detection, and network intelligence (ASN,
+organization, verified search-crawler identity) from your terminal or the Developer API.
 
 [![CI](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/netriskscan-cli.svg)](https://www.npmjs.com/package/netriskscan-cli)
@@ -10,68 +11,22 @@ IP reputation, risk assessment, and network intelligence directly from your term
 
 [Website](https://www.netriskscan.com) · [npm](https://www.npmjs.com/package/netriskscan-cli) · [Developer API](#developer-api) · [Official resources](#official-resources)
 
+<p align="center">
+  <img src="./demo/netriskscan-demo.gif" alt="netriskscan-cli check 17.241.200.160 in a terminal, showing IP, Index, Band, Network Type, Profile, Service, ASN, Organization, Proxy/VPN/Tor signals and verified Search Crawler identity" width="700" />
+</p>
+
 ```bash
 npx netriskscan-cli check 17.241.200.160
 ```
 
-```text
-NetRiskScan
+**No signup. No API key. No configuration required.** The command above runs on a clean
+machine and returns a real result from the live API, metered by an anonymous daily
+allowance (currently 30 checks per public IP per UTC day - see
+[Anonymous trial](#anonymous-trial)). Add a free [API key](#getting-an-api-key) for more.
 
-IP                17.241.200.160
-Index             97
-Band              excellent
-Assessment        complete
-
-Risk Reasons
-Verified Search Crawler       info
-Public Infrastructure         info
-
-Network
-Type              public_infrastructure
-Profile           search_crawler
-Service           Applebot
-Connection        direct
-ASN               AS714
-Organization      Apple Inc.
-
-Location
-Country           United States (US)
-Region            California (CA)
-City              Cupertino
-Time Zone         America/Los_Angeles
-
-Signals
-Proxy             No
-Proxy Type        -
-VPN               No
-Tor               No
-Datacenter        No
-Scanner           Unknown
-Abuse             No
-
-Identity
-Search Crawler    Yes
-Crawler           Applebot
-
-Usage
-Available         29
-Daily Limit       30
-Reset             2026-08-29 00:00 UTC
-
-Request ID        req_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-Explore
-Web               https://www.netriskscan.com
-GitHub            https://github.com/TeamQQ/netriskscan-cli
-```
-
-**No account or API key required** for the anonymous trial - the command above works on a
-clean machine. The `Usage` block is the server telling you how much of today's free
-allowance is left; the CLI never estimates it. Add an API key when you need more
-(see [Getting an API key](#getting-an-api-key)).
-
-Example output - actual values come from the live API and can change as reputation and
-threat data changes.
+The values shown above and in the recording come from the live API and change as
+reputation and threat data changes - see [IP risk check](#ip-risk-check) for a
+field-by-field reference.
 
 ## Why NetRiskScan?
 
