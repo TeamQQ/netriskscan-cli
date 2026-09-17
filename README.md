@@ -1,8 +1,9 @@
 # NetRiskScan CLI
 
-Command-line client and TypeScript SDK for [NetRiskScan](https://www.netriskscan.com): IP
-reputation, proxy/VPN/Tor and datacenter detection, and network intelligence (ASN,
-organization, verified search-crawler identity) from your terminal or the Developer API.
+Command-line client and TypeScript SDK for [NetRiskScan](https://www.netriskscan.com) —
+an IP lookup CLI for IP reputation, IP risk, proxy/VPN/Tor and datacenter detection, and
+network intelligence (ASN, organization, verified search-crawler identity), usable as a
+command line IP lookup from your terminal or the Developer API.
 
 [![CI](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/netriskscan-cli.svg)](https://www.npmjs.com/package/netriskscan-cli)
@@ -57,7 +58,9 @@ Powered by the [NetRiskScan Developer API](#developer-api).
 
 - [Why NetRiskScan?](#why-netriskscan)
 - [Introduction](#introduction)
+- [IP Lookup and Reputation](#ip-lookup-and-reputation)
 - [Features](#features)
+- [Use Cases](#use-cases)
 - [Installation](#installation)
 - [Anonymous trial](#anonymous-trial)
 - [Getting an API key](#getting-an-api-key)
@@ -75,6 +78,7 @@ Powered by the [NetRiskScan Developer API](#developer-api).
 - [SDK usage](#sdk-usage)
 - [Security](#security)
 - [Developer API](#developer-api)
+- [FAQ](#faq)
 - [Official resources](#official-resources)
 - [Contributing](#contributing)
 - [License](#license)
@@ -97,6 +101,15 @@ the server is always the single source of truth.
 `excellent`; `42` is `poor`. It is a cleanliness score, not a threat score - never read
 `90` as "high risk".
 
+## IP Lookup and Reputation
+
+Use `netriskscan check` as a command-line IP lookup and reputation tool: give it an
+IPv4 or IPv6 address and get back the NetRiskScan Index, ASN, organization, network
+type and security signals in one call. It doubles as an IP risk checker CLI and IP
+reputation checker CLI with no account or API key at all, via the
+[anonymous trial](#anonymous-trial) - see [IP risk check](#ip-risk-check) for the full
+field reference.
+
 ## Features
 
 - `check` and `batch` with no API key at all, via the anonymous daily trial
@@ -113,9 +126,23 @@ the server is always the single source of truth.
 - Zero telemetry
 - A typed `NetRiskScanClient` SDK you can import directly in Node.js/TypeScript
 
+## Use Cases
+
+- Manual investigation of a suspicious IP during an incident or support ticket
+- Checking a new VPS or server's IP reputation before deployment or DNS cutover - a
+  quick VPS IP reputation checker for ops and security teams
+- Screening proxy, VPN and Tor traffic in login, checkout or signup flows
+- Running a bulk IP reputation checker over log exports or CIDR-derived IP lists with
+  `batch`
+- Gating a CI/CD pipeline or deploy job on `--fail-below` / `--fail-on` before trusting
+  an IP
+- One step in an OSINT IP lookup workflow alongside other tools - NetRiskScan reports
+  network intelligence signals, not a full OSINT investigation platform
+- Piping `--json` / `--jsonl` output into shell scripts, SIEM ingestion or log pipelines
+
 ## Installation
 
-Run it without installing anything:
+Run it without installing anything - a zero-setup terminal IP lookup:
 
 ```bash
 npx netriskscan-cli check 1.1.1.1
@@ -281,6 +308,14 @@ Request ID        req_xxxxxxxx
 Output above is illustrative of the format - actual values always come from the live
 API response.
 
+### Proxy, VPN and Tor Signals
+
+`netriskscan check` doubles as a proxy detection CLI, VPN detection CLI and Tor
+detection CLI in one command: the `Signals` block reports `Proxy`, `VPN`, `Tor`,
+`Datacenter`, `Scanner` and `Abuse` as independent three-state flags
+(`true` / `false` / `unknown`), so it also works as a datacenter IP checker without
+collapsing an unresolved signal into a false negative.
+
 ### Proxy Type
 
 `Proxy Type` is a classification detail for an address already detected as a proxy - it
@@ -345,7 +380,8 @@ shown when there is nothing to explain.
 ### Location
 
 `location` is **network-level IP geolocation**: where the address is registered and
-routed. It is **not** device or GPS location, and not the precise physical location of
+routed. As an IP geolocation CLI, `netriskscan check` reports this network-level data
+only - it is **not** device or GPS location, and not the precise physical location of
 whoever is using the address - a city can be the operator's aggregation point rather than
 the user's town.
 
@@ -447,6 +483,10 @@ Supports `--json`, `--verbose`, `--api-key`, `--timeout`, and `--max-retries` ju
 netriskscan batch <file> [options]
 ```
 
+Use `netriskscan batch` as a batch IP lookup CLI or bulk IP reputation checker: point
+it at a file of one IP per line and get a risk result for every address, with
+concurrency control and JSONL output for pipelines.
+
 **Important:** NetRiskScan does not currently expose a server-side batch endpoint. This
 command is a **client-side batch**: it sends individual `GET /v1/ip-risk/{ip}` requests
 with a controlled concurrency limit. An API key is optional here too - without one, every
@@ -514,6 +554,8 @@ stream.
 | `--max-retries <n>` | Max automatic retries per request for `429`/`503` (default `3`)                                |
 
 ## JSON output
+
+Add `--json` to turn `check` into a JSON IP lookup CLI for scripts and pipelines:
 
 ```bash
 netriskscan check 1.1.1.1 --json
@@ -602,7 +644,8 @@ or reason columns - so use `--jsonl` when you need the full record.
 
 ## CI/CD
 
-Use `check` with policy flags as a build/deploy gate:
+`--fail-below` and `--fail-on` turn `check` into an IP reputation CI check: use it
+with policy flags as a build/deploy gate:
 
 ```bash
 netriskscan check "$TARGET_IP" --fail-below 60
@@ -846,6 +889,51 @@ only available through the Developer Dashboard.
 See the official [Methodology](https://www.netriskscan.com/methodology.html) page for
 how the NetRiskScan Index itself is computed (this project does not - and will not -
 reimplement that logic client-side).
+
+## FAQ
+
+### How do I look up an IP address from the command line?
+
+Run `netriskscan check <ip>` - no account or API key required for the anonymous daily
+trial. See [Quick start](#quick-start).
+
+### How do I check IP reputation from a terminal?
+
+`netriskscan check <ip>` prints the NetRiskScan Index, band, network and signal data
+for that address. See [IP risk check](#ip-risk-check).
+
+### How do I check an IP risk score using the CLI?
+
+The `Index` and `Band` fields in `netriskscan check` output are the risk score;
+`--fail-below <index>` turns that score into a CI/CD gate. See [CI/CD](#cicd).
+
+### How do I detect proxy, VPN or Tor IPs from the command line?
+
+`netriskscan check <ip>` reports `Proxy`, `VPN` and `Tor` as independent signals in
+the `Signals` block, plus a `Proxy Type` classification when a proxy is detected. See
+[Proxy, VPN and Tor Signals](#proxy-vpn-and-tor-signals).
+
+### Can the CLI detect Tor exit nodes?
+
+It reports the `Tor` signal and, when the API includes a Tor-exit-specific risk
+reason, prints it under `Risk Reasons` - the CLI only relays what the server
+verifies, it never infers exit-node status locally. See [Risk Reasons](#risk-reasons).
+
+### How do I check multiple IP addresses in bulk?
+
+`netriskscan batch ips.txt` reads one IP per line and runs a client-side batch against
+the Developer API with controlled concurrency. See [Batch processing](#batch-processing).
+
+### Can I get IP lookup results as JSON?
+
+Yes - `netriskscan check <ip> --json` prints the raw API response, and
+`netriskscan batch ips.txt --jsonl` prints one JSON object per line. See
+[JSON output](#json-output) and [JSONL output](#jsonl-output).
+
+### Does NetRiskScan CLI work without an API key?
+
+Yes. `check` and `batch` run on an anonymous daily trial with no signup and no API
+key. `usage` always requires a key. See [Anonymous trial](#anonymous-trial).
 
 ## Official resources
 
