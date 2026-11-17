@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.5.0...v1.6.0) (2026-11-17)
+
+
+### Features
+
+* support IP intelligence schema 1.6.0 fields ([#1](https://github.com/TeamQQ/netriskscan-cli/issues/1)) ([7bf9f15](https://github.com/TeamQQ/netriskscan-cli/commit/7bf9f15b4b6c36833d502d09c05543d492c72a4d))
+
 # [1.5.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.4.0...v1.5.0) (2026-09-02)
 
 
