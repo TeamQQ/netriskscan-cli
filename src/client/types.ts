@@ -10,11 +10,7 @@ export type AssessmentGrade = "complete" | "partial" | "limited" | "insufficient
  * never actually guaranteed to match this compile-time type.
  */
 export type ProxyType =
-  | "residential_proxy"
-  | "isp_proxy"
-  | "mobile_proxy"
-  | "datacenter_proxy"
-  | "unknown_proxy";
+  "residential_proxy" | "isp_proxy" | "mobile_proxy" | "datacenter_proxy" | "unknown_proxy";
 
 /**
  * Network-level geolocation of the address, as `GET /v1/ip-risk/{ip}` reports it.
@@ -27,8 +23,10 @@ export type ProxyType =
  * and no city. The CLI shows only what the server actually sent - a missing field is dropped, never
  * back-filled from the code, translated, re-cased, or guessed from a neighbouring field.
  *
- * Only the fields the public API documents live here. Latitude/longitude, postal code, continent
- * and accuracy radius are deliberately absent: they are not part of the `/v1` contract.
+ * Only the fields the public API documents live here. Schema 1.6.0 added continent, postal code and
+ * an approximate coordinate pair; an accuracy radius is still not part of the `/v1` contract. The
+ * 1.6.0 additions are optional as well as nullable: a server that predates them omits the keys
+ * entirely, and a current one can send any of them as `null`.
  */
 export interface IpLocation {
   /** ISO 3166-1 alpha-2, e.g. `"US"`. */
@@ -42,6 +40,27 @@ export interface IpLocation {
   city: string | null;
   /** IANA time zone id, e.g. `"America/Los_Angeles"`. */
   timeZone: string | null;
+  /** UN geoscheme continent code, e.g. `"NA"`. Added in Schema 1.6.0; absent on older servers. */
+  continentCode?: string | null;
+  /** Continent English name, e.g. `"North America"`. Server-owned, shown verbatim. */
+  continent?: string | null;
+  /**
+   * Postal code exactly as the data source provides it - a string, never parsed into a number
+   * (leading zeros are significant). Added in Schema 1.6.0; absent on older servers.
+   */
+  postalCode?: string | null;
+  /**
+   * Approximate network latitude in [-90, 90] - where the network is routed, never the device's
+   * GPS position. Paired with {@link longitude}: the server sends both or neither, and an anycast
+   * network has no single node location, so both come back `null`. A legitimate `0` is a real
+   * coordinate and must survive - never drop it with a truthiness check. Added in Schema 1.6.0.
+   */
+  latitude?: number | null;
+  /**
+   * Approximate network longitude in [-180, 180]; same pairing, range and null semantics as
+   * {@link latitude}. Added in Schema 1.6.0; absent on older servers.
+   */
+  longitude?: number | null;
 }
 
 /**
@@ -116,6 +135,19 @@ export interface IpRiskResponse {
     connectionType: string | null;
     asn: string | null;
     organization: string | null;
+    /**
+     * Trusted primary domain of the network's operating organisation, e.g. `"google.com"` - the
+     * operator itself, never a website hosted on the address or a cloud customer's domain.
+     * Server-owned: the CLI must never infer it from the ASN, organization or reverse DNS.
+     * Added in Schema 1.6.0; absent on older servers, `null` when no trusted mapping exists.
+     */
+    domain?: string | null;
+    /**
+     * Canonical CIDR prefix containing the queried address, e.g. `"8.8.8.0/24"` (IPv4 or IPv6).
+     * Server-owned and shown verbatim - the CLI never computes, widens or guesses a range itself.
+     * Added in Schema 1.6.0; absent on older servers, `null` when no containing range is available.
+     */
+    range?: string | null;
   };
   flags: {
     proxy: boolean | null;

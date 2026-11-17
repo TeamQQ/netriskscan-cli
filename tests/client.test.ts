@@ -476,9 +476,7 @@ describe("location and risk.reasons", () => {
         index: 42,
         band: "poor",
         assessmentGrade: "complete",
-        reasons: [
-          { code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" },
-        ],
+        reasons: [{ code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" }],
       },
       network: {
         type: "residential",
@@ -611,5 +609,207 @@ describe("location and risk.reasons", () => {
     const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
 
     expect(data.risk.reasons).toEqual(reasons);
+  });
+});
+
+/**
+ * Schema 1.6.0 completeness fields: `network.domain` / `network.range` plus the five geolocation
+ * additions. The client is transport only - every value must arrive exactly as the server sent it,
+ * and a server that predates the schema must keep working unchanged.
+ */
+describe("schema 1.6.0 completeness fields", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const fullLocation = {
+    countryCode: "US",
+    country: "United States",
+    regionCode: "IL",
+    region: "Illinois",
+    city: "Chicago",
+    timeZone: "America/Chicago",
+    continentCode: "NA",
+    continent: "North America",
+    postalCode: "60666",
+    latitude: 41.8781,
+    longitude: -87.6298,
+  };
+
+  const fullNetwork = {
+    type: "public_infrastructure",
+    connectionType: "direct",
+    asn: "AS15169",
+    organization: "Google LLC",
+    domain: "google.com",
+    range: "142.250.190.64/26",
+  };
+
+  it("reads all seven fields when the server sends them, leaving risk and usage untouched", async () => {
+    const body = successBody({
+      network: fullNetwork,
+      location: fullLocation,
+      usage: { mode: "anonymous", dailyLimit: 30, used: 7, remaining: 19 },
+    });
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const { data } = await new NetRiskScanClient().checkIp("142.250.190.78");
+
+    expect(data).toEqual(body);
+    expect(data.network.domain).toBe("google.com");
+    expect(data.network.range).toBe("142.250.190.64/26");
+    expect(data.location).toEqual(fullLocation);
+    // The new fields are display data, never a second input to the verdict or the allowance.
+    expect(data.risk.index).toBe(72);
+    expect(data.usage?.remaining).toBe(19);
+  });
+
+  it("keeps all seven fields null when the server sends null", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(
+        200,
+        successBody({
+          network: { ...fullNetwork, domain: null, range: null },
+          location: {
+            countryCode: null,
+            country: null,
+            regionCode: null,
+            region: null,
+            city: null,
+            timeZone: null,
+            continentCode: null,
+            continent: null,
+            postalCode: null,
+            latitude: null,
+            longitude: null,
+          },
+        }),
+      ),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+    expect(data.network.domain).toBeNull();
+    expect(data.network.range).toBeNull();
+    expect(data.location?.continentCode).toBeNull();
+    expect(data.location?.continent).toBeNull();
+    expect(data.location?.postalCode).toBeNull();
+    expect(data.location?.latitude).toBeNull();
+    expect(data.location?.longitude).toBeNull();
+  });
+
+  /** An older server omits the keys entirely; the CLI must parse the response and invent none. */
+  it("tolerates an old server that omits all seven keys", async () => {
+    const legacyLocation = {
+      countryCode: "US",
+      country: "United States",
+      regionCode: "CA",
+      region: "California",
+      city: "Los Angeles",
+      timeZone: "America/Los_Angeles",
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(200, successBody({ location: legacyLocation })),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+    expect(data.network.domain).toBeUndefined();
+    expect(data.network.range).toBeUndefined();
+    expect(data.location).toEqual(legacyLocation);
+    expect(data.location?.continentCode).toBeUndefined();
+    expect(data.location?.continent).toBeUndefined();
+    expect(data.location?.postalCode).toBeUndefined();
+    expect(data.location?.latitude).toBeUndefined();
+    expect(data.location?.longitude).toBeUndefined();
+  });
+
+  it("does not crash on an explicit null location alongside the new network fields", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(
+        200,
+        successBody({ network: { ...fullNetwork, domain: null, range: null }, location: null }),
+      ),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("127.0.0.1");
+
+    expect(data.location).toBeNull();
+    expect(data.network.domain).toBeNull();
+    expect(data.network.range).toBeNull();
+  });
+
+  /** The range is the server's canonical CIDR, echoed verbatim for both address families. */
+  it.each([
+    ["8.8.8.8", "8.8.8.0/24"],
+    ["2001:4860:4860::8888", "2001:4860:4840::/42"],
+  ])("preserves the server's range for %s exactly as sent", async (ip, range) => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(200, successBody({ network: { ...fullNetwork, range } })),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp(ip);
+
+    expect(data.network.range).toBe(range);
+  });
+
+  /** A postal code is a string from the source - leading zeros are significant, never a number. */
+  it("keeps postalCode a string, including leading zeros", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(200, successBody({ location: { ...fullLocation, postalCode: "01234" } })),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+    expect(typeof data.location?.postalCode).toBe("string");
+    expect(data.location?.postalCode).toBe("01234");
+  });
+
+  /** (0, 0) is a legitimate coordinate pair in the Gulf of Guinea - a truthiness check would eat it. */
+  it("preserves a legitimate zero coordinate pair", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(200, successBody({ location: { ...fullLocation, latitude: 0, longitude: 0 } })),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("1.2.3.4");
+
+    expect(data.location?.latitude).toBe(0);
+    expect(data.location?.longitude).toBe(0);
+  });
+
+  /** Anycast has no single node position: the pair and postal code are null, the rest survives. */
+  it("preserves an anycast null coordinate pair with the rest of the location intact", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockResponse(
+        200,
+        successBody({
+          network: { ...fullNetwork, range: "8.8.8.0/24" },
+          location: {
+            ...fullLocation,
+            regionCode: null,
+            region: null,
+            city: null,
+            timeZone: null,
+            postalCode: null,
+            latitude: null,
+            longitude: null,
+          },
+        }),
+      ),
+    );
+
+    const { data } = await new NetRiskScanClient().checkIp("8.8.8.8");
+
+    expect(data.location?.latitude).toBeNull();
+    expect(data.location?.longitude).toBeNull();
+    expect(data.location?.postalCode).toBeNull();
+    expect(data.location?.country).toBe("United States");
+    expect(data.location?.continentCode).toBe("NA");
+    expect(data.network.range).toBe("8.8.8.0/24");
   });
 });

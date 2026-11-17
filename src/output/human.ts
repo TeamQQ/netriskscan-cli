@@ -88,7 +88,7 @@ function severityColor(severity: string): (text: string) => string {
  * Rows for network-level geolocation - where the network is routed, not where a device is.
  *
  * Each row appears only when the server actually sent that field: geo resolution is independently
- * partial (a country with no city is normal), and five "N/A" rows would be noise dressed up as
+ * partial (a country with no city is normal), and a wall of "N/A" rows would be noise dressed up as
  * data. An absent `location` object yields no rows, so the caller drops the whole section.
  */
 function locationLines(location: IpLocation | null | undefined): string[] {
@@ -99,6 +99,21 @@ function locationLines(location: IpLocation | null | undefined): string[] {
   const region = formatGeoName(location.region, location.regionCode);
   if (region !== undefined) lines.push(row("Region", region));
   if (location.city) lines.push(row("City", location.city));
+  const continent = formatGeoName(location.continent, location.continentCode);
+  if (continent !== undefined) lines.push(row("Continent", continent));
+  if (location.postalCode) lines.push(row("Postal Code", location.postalCode));
+  // A coordinate pair is shown only when the server sent both halves as real numbers. `0` is a
+  // legitimate coordinate, so this is a type check, never a truthiness check; an anycast network
+  // sends null for both and gets no row rather than a fabricated position.
+  const { latitude, longitude } = location;
+  if (
+    typeof latitude === "number" &&
+    Number.isFinite(latitude) &&
+    typeof longitude === "number" &&
+    Number.isFinite(longitude)
+  ) {
+    lines.push(row("Coordinates", `${latitude}, ${longitude}`));
+  }
   if (location.timeZone) lines.push(row("Time Zone", location.timeZone));
   return lines;
 }
@@ -160,6 +175,15 @@ export function renderCheckResult(ip: string, data: IpRiskResponse): void {
   lines.push(row("Connection", formatNullable(data.network.connectionType)));
   lines.push(row("ASN", formatNullable(data.network.asn)));
   lines.push(row("Organization", formatNullable(data.network.organization)));
+  // Schema 1.6.0 additions, dropped when absent for the same reason as Profile/Service above.
+  // Both are server-owned facts: never inferred from the ASN, organization or hostname, and the
+  // range is never computed client-side.
+  if (data.network.domain) {
+    lines.push(row("Domain", data.network.domain));
+  }
+  if (data.network.range) {
+    lines.push(row("Network Range", data.network.range));
+  }
   lines.push("");
 
   const geoLines = locationLines(data.location);
