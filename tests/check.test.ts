@@ -16,7 +16,11 @@ function p0Body(): Record<string, unknown> {
       assessmentGrade: "complete",
       reasons: [
         { code: "RESIDENTIAL_PROXY_DETECTED", category: "anonymity", severity: "high" },
-        { code: "NEW_FUTURE_NETWORK_SIGNAL", category: "future_category", severity: "future_level" },
+        {
+          code: "NEW_FUTURE_NETWORK_SIGNAL",
+          category: "future_category",
+          severity: "future_level",
+        },
       ],
     },
     network: {
@@ -58,6 +62,46 @@ function legacyBody(): Record<string, unknown> {
       datacenter: false,
       scanner: false,
       abuse: false,
+    },
+  };
+}
+
+/** The Schema 1.6.0 shape: network domain/range plus the five extended geolocation fields. */
+function schema160Body(): Record<string, unknown> {
+  return {
+    requestId: "req_schema160",
+    risk: { index: 96, band: "excellent", assessmentGrade: "complete" },
+    network: {
+      type: "public_infrastructure",
+      connectionType: "direct",
+      asn: "AS15169",
+      organization: "Google LLC",
+      domain: "google.com",
+      range: "142.250.190.64/26",
+    },
+    location: {
+      countryCode: "US",
+      country: "United States",
+      regionCode: "IL",
+      region: "Illinois",
+      city: "Chicago",
+      timeZone: "America/Chicago",
+      continentCode: "NA",
+      continent: "North America",
+      postalCode: "60666",
+      latitude: 41.8781,
+      longitude: -87.6298,
+    },
+    flags: {
+      proxy: false,
+      proxyType: null,
+      vpn: false,
+      tor: false,
+      datacenter: true,
+      scanner: null,
+      abuse: false,
+      searchCrawler: false,
+      searchCrawlerName: null,
     },
   };
 }
@@ -139,6 +183,105 @@ describe("check --json", () => {
     expect(parsed).toEqual(body);
     expect(Object.keys(parsed)).not.toContain("location");
     expect(parsed.risk).not.toHaveProperty("reasons");
+  });
+
+  /** Schema 1.6.0 is passthrough too: all seven fields leave exactly as the server sent them. */
+  it("prints all seven schema 1.6.0 fields verbatim, with no terminal decoration", async () => {
+    const body = schema160Body();
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const out = await runCheck(["check", "142.250.190.78", "--json"]);
+    const parsed = JSON.parse(out) as {
+      network: { domain: string; range: string };
+      location: { postalCode: string; latitude: number; longitude: number };
+    };
+
+    expect(parsed).toEqual(body);
+    expect(parsed.network.domain).toBe("google.com");
+    expect(parsed.network.range).toBe("142.250.190.64/26");
+    expect(parsed.location.postalCode).toBe("60666");
+    expect(parsed.location.latitude).toBe(41.8781);
+    expect(parsed.location.longitude).toBe(-87.6298);
+    expect(out).not.toContain("NetRiskScan\n");
+    // eslint-disable-next-line no-control-regex
+    expect(out).not.toMatch(/\u001b\[/);
+  });
+
+  it("preserves null for every new field instead of coercing it", async () => {
+    const body = schema160Body();
+    (body.network as Record<string, unknown>).domain = null;
+    (body.network as Record<string, unknown>).range = null;
+    Object.assign(body.location as Record<string, unknown>, {
+      continentCode: null,
+      continent: null,
+      postalCode: null,
+      latitude: null,
+      longitude: null,
+    });
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const out = await runCheck(["check", "8.8.8.8", "--json"]);
+    const parsed = JSON.parse(out) as {
+      network: Record<string, unknown>;
+      location: Record<string, unknown>;
+    };
+
+    expect(parsed).toEqual(body);
+    expect(parsed.network.domain).toBeNull();
+    expect(parsed.network.range).toBeNull();
+    expect(parsed.location.latitude).toBeNull();
+    expect(parsed.location.longitude).toBeNull();
+    expect(parsed.location.postalCode).toBeNull();
+    expect(out).toContain('"latitude": null');
+    expect(out).not.toContain('"latitude": 0');
+  });
+
+  it("adds none of the seven keys for a server that predates them", async () => {
+    const body = {
+      ...legacyBody(),
+      location: {
+        countryCode: "US",
+        country: "United States",
+        regionCode: "CA",
+        region: "California",
+        city: "Los Angeles",
+        timeZone: "America/Los_Angeles",
+      },
+    };
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const out = await runCheck(["check", "8.8.8.8", "--json"]);
+    const parsed = JSON.parse(out) as {
+      network: Record<string, unknown>;
+      location: Record<string, unknown>;
+    };
+
+    expect(parsed).toEqual(body);
+    expect(parsed.network).not.toHaveProperty("domain");
+    expect(parsed.network).not.toHaveProperty("range");
+    for (const key of ["continentCode", "continent", "postalCode", "latitude", "longitude"]) {
+      expect(parsed.location).not.toHaveProperty(key);
+    }
+  });
+
+  it("keeps a zero coordinate pair as numbers and the postal code as a string", async () => {
+    const body = schema160Body();
+    Object.assign(body.location as Record<string, unknown>, {
+      postalCode: "01234",
+      latitude: 0,
+      longitude: 0,
+    });
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const out = await runCheck(["check", "1.2.3.4", "--json"]);
+    const parsed = JSON.parse(out) as {
+      location: { postalCode: unknown; latitude: unknown; longitude: unknown };
+    };
+
+    expect(parsed.location.latitude).toBe(0);
+    expect(parsed.location.longitude).toBe(0);
+    expect(typeof parsed.location.postalCode).toBe("string");
+    expect(parsed.location.postalCode).toBe("01234");
   });
 });
 
@@ -239,6 +382,29 @@ describe("CI policy is unaffected by reasons and location", () => {
     for (const flag of ["reason", "country", "searchCrawler"]) {
       process.exitCode = undefined;
       await runCheck(["check", "203.0.113.10", "--fail-on", flag]);
+      expect(process.exitCode).toBe(ExitCode.InvalidArgument);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  /** Schema 1.6.0 is display-only: the gate still reads risk.index and nothing else. */
+  it("gates on risk.index alone even with the schema 1.6.0 fields present", async () => {
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, schema160Body()));
+    await runCheck(["check", "142.250.190.78", "--fail-below", "97"]);
+    expect(process.exitCode).toBe(ExitCode.CiPolicyFailed);
+
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, schema160Body()));
+    await runCheck(["check", "142.250.190.78", "--fail-below", "90"]);
+    expect(process.exitCode).toBe(ExitCode.Success);
+  });
+
+  /** The new fields are not risk flags either - the --fail-on vocabulary is unchanged. */
+  it("rejects the schema 1.6.0 fields as --fail-on values", async () => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(mockResponse(200, schema160Body()));
+
+    for (const flag of ["domain", "range", "latitude", "continent"]) {
+      process.exitCode = undefined;
+      await runCheck(["check", "142.250.190.78", "--fail-on", flag]);
       expect(process.exitCode).toBe(ExitCode.InvalidArgument);
     }
     expect(fetchMock).not.toHaveBeenCalled();

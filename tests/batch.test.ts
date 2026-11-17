@@ -322,4 +322,205 @@ describe("batch without an API key", () => {
     expect(jsonl).not.toContain("undefined");
     expect(process.exitCode).toBe(ExitCode.Success);
   });
+
+  /** The Schema 1.6.0 shape: network domain/range plus the five extended geolocation fields. */
+  function schema160Body(): Record<string, unknown> {
+    return {
+      requestId: "req_schema160",
+      risk: { index: 96, band: "excellent", assessmentGrade: "complete" },
+      network: {
+        type: "public_infrastructure",
+        connectionType: "direct",
+        asn: "AS15169",
+        organization: "Google LLC",
+        domain: "google.com",
+        range: "142.250.190.64/26",
+      },
+      location: {
+        countryCode: "US",
+        country: "United States",
+        regionCode: "IL",
+        region: "Illinois",
+        city: "Chicago",
+        timeZone: "America/Chicago",
+        continentCode: "NA",
+        continent: "North America",
+        postalCode: "60666",
+        latitude: 41.8781,
+        longitude: -87.6298,
+      },
+      flags: {
+        proxy: false,
+        vpn: false,
+        tor: false,
+        datacenter: true,
+        scanner: null,
+        abuse: false,
+      },
+      usage: {
+        mode: "anonymous",
+        dailyLimit: 30,
+        used: 8,
+        remaining: 22,
+        resetAt: "2026-08-29T00:00:00Z",
+      },
+    };
+  }
+
+  /** JSONL stays passthrough: all seven fields ride under `result` exactly as the server sent them. */
+  it("carries all seven schema 1.6.0 fields through JSONL untouched", async () => {
+    const body = schema160Body();
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const jsonl = await runBatch(["batch", ipsFile("142.250.190.78"), "--jsonl"]);
+    const line = JSON.parse(jsonl.trim()) as {
+      ip: string;
+      ok: boolean;
+      result: {
+        network: { domain: string; range: string };
+        location: { postalCode: string; latitude: number; longitude: number };
+      };
+    };
+
+    expect(line.ip).toBe("142.250.190.78");
+    expect(line.ok).toBe(true);
+    expect(line.result).toEqual(body);
+    expect(line.result.network.domain).toBe("google.com");
+    expect(line.result.network.range).toBe("142.250.190.64/26");
+    expect(line.result.location.postalCode).toBe("60666");
+    expect(line.result.location.latitude).toBe(41.8781);
+    expect(line.result.location.longitude).toBe(-87.6298);
+    // Machine-readable stream only: no table, no summary, no colour.
+    expect(jsonl).not.toContain("Anonymous trial");
+    expect(jsonl).not.toContain("succeeded,");
+    // eslint-disable-next-line no-control-regex
+    expect(jsonl).not.toMatch(/\u001b\[/);
+    expect(process.exitCode).toBe(ExitCode.Success);
+  });
+
+  /** An anycast address has no node position: null must stay null, never 0, false or "". */
+  it("preserves anycast nulls in JSONL without coercing them", async () => {
+    const body = schema160Body();
+    (body.network as Record<string, unknown>).range = "8.8.8.0/24";
+    Object.assign(body.location as Record<string, unknown>, {
+      regionCode: null,
+      region: null,
+      city: null,
+      timeZone: null,
+      postalCode: null,
+      latitude: null,
+      longitude: null,
+    });
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, body));
+
+    const jsonl = await runBatch(["batch", ipsFile("8.8.8.8"), "--jsonl"]);
+    const line = JSON.parse(jsonl.trim()) as { result: Record<string, unknown> };
+    const location = line.result.location as Record<string, unknown>;
+
+    expect(line.result).toEqual(body);
+    expect(location.latitude).toBeNull();
+    expect(location.longitude).toBeNull();
+    expect(location.postalCode).toBeNull();
+    expect(jsonl).toContain('"latitude":null');
+    expect(jsonl).not.toContain('"latitude":0');
+    expect(jsonl).not.toContain('"latitude":false');
+    expect(jsonl).not.toContain('"latitude":""');
+  });
+
+  /** An old server omits the keys; JSONL must not synthesize them, zero-filled or otherwise. */
+  it("adds none of the seven keys in JSONL for a server that predates them", async () => {
+    const legacy = {
+      requestId: "req_oldserver",
+      risk: { index: 95, band: "excellent", assessmentGrade: "complete" },
+      network: {
+        type: "residential",
+        connectionType: "direct",
+        asn: "AS123",
+        organization: "ISP",
+      },
+      location: {
+        countryCode: "US",
+        country: "United States",
+        regionCode: "CA",
+        region: "California",
+        city: "Los Angeles",
+        timeZone: "America/Los_Angeles",
+      },
+      flags: {
+        proxy: false,
+        vpn: false,
+        tor: false,
+        datacenter: false,
+        scanner: false,
+        abuse: false,
+      },
+    };
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, legacy));
+
+    const jsonl = await runBatch(["batch", ipsFile("5.6.7.13"), "--jsonl"]);
+    const line = JSON.parse(jsonl.trim()) as {
+      result: { network: Record<string, unknown>; location: Record<string, unknown> };
+    };
+
+    expect(line.result).toEqual(legacy);
+    expect(line.result.network).not.toHaveProperty("domain");
+    expect(line.result.network).not.toHaveProperty("range");
+    for (const key of ["continentCode", "continent", "postalCode", "latitude", "longitude"]) {
+      expect(line.result.location).not.toHaveProperty(key);
+    }
+  });
+
+  /** One refused IP never drops or mutates the successful items' new fields. */
+  it("keeps successful items' schema 1.6.0 fields intact when another IP fails", async () => {
+    const body = schema160Body();
+    const fetchMock = vi.mocked(fetch).mockImplementation((input) => {
+      const url = String(input);
+      return Promise.resolve(
+        url.endsWith("5.6.7.14")
+          ? mockResponse(200, body)
+          : mockResponse(401, {
+              error: { code: "invalid_api_key", message: "bad key", requestId: "req_1" },
+            }),
+      );
+    });
+
+    const jsonl = await runBatch([
+      "batch",
+      ipsFile("5.6.7.14", "5.6.7.15", "not-an-ip"),
+      "--concurrency",
+      "1",
+      "--jsonl",
+    ]);
+    const lines = jsonl
+      .trim()
+      .split("\n")
+      .map(
+        (l) =>
+          JSON.parse(l) as { ip: string; ok: boolean; result?: unknown; error?: { code: string } },
+      );
+
+    expect(lines).toHaveLength(3);
+    expect(lines[0].ok).toBe(true);
+    expect(lines[0].result).toEqual(body);
+    expect(lines[1].ok).toBe(false);
+    expect(lines[1].error?.code).toBe("invalid_api_key");
+    expect(lines[2].ok).toBe(false);
+    expect(lines[2].error?.code).toBe("invalid_ip");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(process.exitCode).toBe(ExitCode.AuthError);
+  });
+
+  /** The table stays narrow: the seven fields are reached through --jsonl, not new columns. */
+  it("does not widen the default table with the schema 1.6.0 fields", async () => {
+    vi.mocked(fetch).mockResolvedValue(mockResponse(200, schema160Body()));
+
+    const table = await runBatch(["batch", ipsFile("5.6.7.16")]);
+
+    expect(table).toContain("1 succeeded, 0 failed");
+    expect(table).not.toContain("google.com");
+    expect(table).not.toContain("142.250.190.64/26");
+    expect(table).not.toContain("Continent");
+    expect(table).not.toContain("Postal");
+    expect(table).not.toContain("Coordinates");
+  });
 });

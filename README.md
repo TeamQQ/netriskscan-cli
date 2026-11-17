@@ -34,8 +34,11 @@ field-by-field reference.
 - Known infrastructure identification for services such as search crawlers and public
   infrastructure, instead of treating every address as a generic business or datacenter IP
 - Proxy, VPN, Tor, abuse, blacklist and threat signals
-- Network-level IP geolocation (country, region, city, time zone)
-- Public risk reasons: the server's own explanation of *why* an address scored as it did
+- Network-level IP geolocation (country, region, city, continent, postal code,
+  approximate coordinates, time zone)
+- Network attribution: the operator's primary domain and the CIDR range containing the
+  address (IP Intelligence Schema 1.6.0)
+- Public risk reasons: the server's own explanation of _why_ an address scored as it did
 - One normalized NetRiskScan Index instead of raw provider scores - higher is cleaner
 - `unknown` and `not applicable` states are preserved, never collapsed into "false"
 - Anonymous daily trial: run your first check with no account, no key, no configuration
@@ -117,7 +120,10 @@ field reference.
 - IPv4 and IPv6 support
 - Proxy type classification (residential, ISP, mobile, datacenter) for detected proxies,
   and verified search crawler identity (Googlebot, Bingbot, Applebot, ...)
-- IP geolocation and server-generated risk reasons in `check`, `--json` and `--jsonl`
+- IP geolocation (country, region, city, continent, postal code, approximate
+  coordinates) and server-generated risk reasons in `check`, `--json` and `--jsonl`
+- Network owner domain and CIDR range (IP Intelligence Schema 1.6.0 - purely additive,
+  older servers still fully supported)
 - Human-readable terminal output, `--json`, and `--jsonl` (batch) modes
 - Correct three-state handling of risk flags (`true` / `false` / `null` - never coerced)
 - CI-friendly exit codes and `--fail-below` / `--fail-on` policy gates
@@ -266,6 +272,11 @@ netriskscan check <ip> [options]
 Calls `GET /v1/ip-risk/{ip}` - no query string parameters are ever sent. An API key is
 optional; without one the request uses the [anonymous trial](#anonymous-trial).
 
+Supports **IP Intelligence Schema 1.6.0**: `network.domain` / `network.range` and the
+extended `location` fields (continent, postal code, approximate coordinates). The
+upgrade is purely additive - a server that predates these fields still works unchanged,
+and `--json` / `--jsonl` pass every field through verbatim.
+
 ```bash
 $ netriskscan check 1.1.1.1
 
@@ -284,9 +295,12 @@ Type              public_infrastructure
 Connection        direct
 ASN               AS13335
 Organization      Cloudflare, Inc.
+Domain            cloudflare.com
+Network Range     1.1.1.0/24
 
 Location
 Country           United States (US)
+Continent         North America (NA)
 Time Zone         America/Los_Angeles
 
 Signals
@@ -343,6 +357,32 @@ itself; it only displays the classification the API already returned.** A verifi
 crawler is identity information, not a risk signal, so it never affects `risk.index`,
 `--fail-on`, or the CLI's exit code.
 
+### Network Domain and Range
+
+Schema 1.6.0 adds two network-attribution rows, shown only when the server resolved
+them:
+
+```text
+Network
+Type              public_infrastructure
+Connection        direct
+ASN               AS15169
+Organization      Google LLC
+Domain            google.com
+Network Range     8.8.8.0/24
+```
+
+- `Domain` is the **operating organisation's trusted primary domain** (e.g.
+  `google.com`, `cloudflare.com`) - the operator itself, not a website hosted on the
+  address and not a cloud customer's domain. The CLI never infers it from the ASN,
+  organization or reverse DNS; it prints only what the server sent.
+- `Network Range` is the **canonical CIDR prefix containing the queried address** (IPv4
+  or IPv6, e.g. `8.8.8.0/24` or `2001:4860:4840::/42`). It is the server's answer, shown
+  verbatim - the CLI never computes, widens or guesses a range itself.
+
+Both fields are optional and nullable: `null`, an empty value, or a server that predates
+Schema 1.6.0 simply prints no row. Neither field affects `risk.index` or any exit code.
+
 ### Risk Reasons
 
 `risk.reasons` is the server's own explanation of the assessment it just returned - the
@@ -359,7 +399,7 @@ Residential Proxy Detected    high
 Reasons are **not proof of fraud or malicious activity**. `VPN_DETECTED` means a VPN was
 detected, nothing more. Nor are they all negative: `VERIFIED_SEARCH_CRAWLER`,
 `PUBLIC_INFRASTRUCTURE` and `RESIDENTIAL_NETWORK` are exactly the reasons an address
-scores *well*, which is why the block is called `Risk Reasons` and not "threats".
+scores _well_, which is why the block is called `Risk Reasons` and not "threats".
 
 ```text
 Risk Reasons
@@ -388,9 +428,12 @@ the user's town.
 ```text
 Location
 Country           United States (US)
-Region            California (CA)
-City              Mountain View
-Time Zone         America/Los_Angeles
+Region            Illinois (IL)
+City              Chicago
+Continent         North America (NA)
+Postal Code       60666
+Coordinates       41.8781, -87.6298
+Time Zone         America/Chicago
 ```
 
 Every field is independently optional. Geo resolution is often partial, and the CLI shows
@@ -403,6 +446,22 @@ Location
 Country           Germany (DE)
 Time Zone         Europe/Berlin
 ```
+
+Schema 1.6.0 extends the block with three more rows, each shown only when the server
+resolved it:
+
+- `Continent` - the UN geoscheme continent name and code, formatted exactly like
+  `Country` and `Region` (`North America (NA)`).
+- `Postal Code` - the data source's postal code, printed verbatim as a string. Leading
+  zeros survive; it is never reformatted or parsed into a number.
+- `Coordinates` - `latitude, longitude`, shown only when the server sent **both** as
+  numbers. This is an **approximate network location**, not a device GPS fix, and a
+  legitimate `0` coordinate is preserved (`0, 0` renders as `0, 0`).
+
+Anycast networks (public DNS resolvers, some CDN edges), unlocatable addresses and
+private/reserved addresses may return `null` for coordinates and postal code - an
+anycast address has no single node position. The CLI then prints no row rather than a
+fabricated value, and never completes, guesses or computes geography client-side.
 
 Names and codes are server-owned strings, printed verbatim: never translated,
 re-capitalized, or derived from one another. `location` has no effect on the risk
@@ -571,9 +630,7 @@ coerced to `false`, `0`, or a string):
     "index": 95,
     "band": "excellent",
     "assessmentGrade": "complete",
-    "reasons": [
-      { "code": "VERIFIED_SEARCH_CRAWLER", "category": "identity", "severity": "info" }
-    ]
+    "reasons": [{ "code": "VERIFIED_SEARCH_CRAWLER", "category": "identity", "severity": "info" }]
   },
   "network": {
     "type": "public_infrastructure",
@@ -581,7 +638,9 @@ coerced to `false`, `0`, or a string):
     "service": "Googlebot",
     "connectionType": "direct",
     "asn": "AS15169",
-    "organization": "Google LLC"
+    "organization": "Google LLC",
+    "domain": "google.com",
+    "range": "66.249.66.0/24"
   },
   "location": {
     "countryCode": "US",
@@ -589,7 +648,12 @@ coerced to `false`, `0`, or a string):
     "regionCode": "CA",
     "region": "California",
     "city": "Mountain View",
-    "timeZone": "America/Los_Angeles"
+    "timeZone": "America/Los_Angeles",
+    "continentCode": "NA",
+    "continent": "North America",
+    "postalCode": "94043",
+    "latitude": 37.422,
+    "longitude": -122.084
   },
   "flags": {
     "proxy": false,
@@ -611,6 +675,11 @@ in `--json`/`--jsonl` - e.g. `"RESIDENTIAL_PROXY_DETECTED"` and `"residential_pr
 never the `Residential Proxy Detected` / `Residential Proxy` labels shown in the default
 terminal output. A server that predates these fields simply omits the keys; the CLI does
 not synthesize them.
+
+The Schema 1.6.0 fields (`network.domain`, `network.range`, `location.continentCode`,
+`location.continent`, `location.postalCode`, `location.latitude`, `location.longitude`)
+pass through the same way: `null` stays `null` (never `0`, `false` or `""`), a legitimate
+`0` coordinate stays `0`, and `postalCode` stays a string.
 
 In `--json` mode there is no spinner, no ANSI color, and no banner - stdout carries only
 the JSON. Errors always go to stderr, so this composes cleanly:
@@ -638,9 +707,10 @@ line-oriented processing (`jq`, `grep`, log pipelines, etc.). A failed IP never 
 the whole batch to fail or drops output for the rest.
 
 The envelope (`ip`, `ok`, `result` / `error`) belongs to the CLI; everything under
-`result` is the API response verbatim, so `location` and `risk.reasons` appear there
-untouched. The default batch table deliberately stays narrow - it grows no country, city
-or reason columns - so use `--jsonl` when you need the full record.
+`result` is the API response verbatim, so `location`, `risk.reasons` and the Schema 1.6.0
+network/geo fields (`domain`, `range`, continent, postal code, coordinates) appear there
+untouched. The default batch table deliberately stays narrow - it grows no country, city,
+domain, range or reason columns - so use `--jsonl` when you need the full record.
 
 ## CI/CD
 
@@ -839,12 +909,27 @@ for (const reason of data.risk.reasons ?? []) {
   console.log(reason.code, reason.severity);
 }
 console.log(data.location?.country ?? "unknown");
+console.log(data.network.domain ?? "unknown");
+console.log(data.network.range ?? "unknown");
+
+// Coordinates are a pair: both numbers or both null (anycast). 0 is a real coordinate.
+const { latitude, longitude } = data.location ?? {};
+if (typeof latitude === "number" && typeof longitude === "number") {
+  console.log("approximate network position:", latitude, longitude);
+}
 ```
 
 Both are optional on `IpRiskResponse`, and every field inside `IpLocation` is nullable: an
 older server omits them entirely, and a newer one can resolve a country without a city.
 `RiskReason.code` / `category` / `severity` are plain `string`s on purpose, so a reason
 code added server-side after your build still type-checks and still renders.
+
+Schema 1.6.0 adds `network.domain` / `network.range` and `IpLocation.continentCode` /
+`continent` / `postalCode` / `latitude` / `longitude`. All seven are optional and nullable
+(`field?: T | null`): an older server omits them, a newer one can send `null`, and the
+coordinate pair is either both numbers or both `null` (an anycast network has no single
+node position). `postalCode` is a string, and `0` coordinates are legitimate values - read
+them with a type check, never a truthiness check.
 
 See [examples/](examples/) for runnable scripts.
 
@@ -862,10 +947,11 @@ See [examples/](examples/) for runnable scripts.
 
 ## Developer API
 
-|                 |                                             |
-| --------------- | ------------------------------------------- |
-| Base URL        | `https://api.netriskscan.com`               |
-| Current version | `v1` (path prefix `/v1`, **not** `/api/v1`) |
+|                 |                                                                  |
+| --------------- | ---------------------------------------------------------------- |
+| Base URL        | `https://api.netriskscan.com`                                    |
+| Current version | `v1` (path prefix `/v1`, **not** `/api/v1`)                      |
+| Response schema | IP Intelligence Schema 1.6.0 (additive; older servers supported) |
 
 This is a completely separate system from the netriskscan.com website's internal
 `/api/public/*` endpoints - different auth, different response shapes, no compatibility

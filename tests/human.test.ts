@@ -208,25 +208,23 @@ describe("Identity section", () => {
   });
 
   it("shows No / - for an ordinary, non-crawler address", () => {
-    const out = render(
-      response({}, undefined, { searchCrawler: false, searchCrawlerName: null }),
-    );
+    const out = render(response({}, undefined, { searchCrawler: false, searchCrawlerName: null }));
 
     expect(out).toContain("Search Crawler    No");
     expect(out).toContain("Crawler           -");
   });
 
   it("shows Unknown / - when the server could not determine crawler status", () => {
-    const out = render(
-      response({}, undefined, { searchCrawler: null, searchCrawlerName: null }),
-    );
+    const out = render(response({}, undefined, { searchCrawler: null, searchCrawlerName: null }));
 
     expect(out).toContain("Search Crawler    Unknown");
     expect(out).toContain("Crawler           -");
   });
 
   it("is placed between Signals and Request ID", () => {
-    const out = render(response({}, undefined, { searchCrawler: true, searchCrawlerName: "Googlebot" }));
+    const out = render(
+      response({}, undefined, { searchCrawler: true, searchCrawlerName: "Googlebot" }),
+    );
 
     expect(out.indexOf("Signals")).toBeLessThan(out.indexOf("Identity"));
     expect(out.indexOf("Identity")).toBeLessThan(out.indexOf("Request ID"));
@@ -251,11 +249,11 @@ describe("Identity section", () => {
    * signals (e.g. datacenter hosting) are true for the same address. */
   it("does not alter unrelated Signals rows for a verified crawler", () => {
     const out = render(
-      response(
-        {},
-        undefined,
-        { searchCrawler: true, searchCrawlerName: "Googlebot", datacenter: true },
-      ),
+      response({}, undefined, {
+        searchCrawler: true,
+        searchCrawlerName: "Googlebot",
+        datacenter: true,
+      }),
     );
 
     expect(out).toContain("Datacenter        Yes");
@@ -468,7 +466,9 @@ describe("Risk Reasons section", () => {
 
     expect(out).toContain("Verified Search Crawler");
     expect(out).toContain("Public Infrastructure");
-    expect(out.indexOf("Verified Search Crawler")).toBeLessThan(out.indexOf("Public Infrastructure"));
+    expect(out.indexOf("Verified Search Crawler")).toBeLessThan(
+      out.indexOf("Public Infrastructure"),
+    );
   });
 
   it("is placed under the risk summary it explains, above Network", () => {
@@ -628,5 +628,280 @@ describe("verified crawler with location and reasons", () => {
     expect(out).toContain("Scanner           Unknown");
     expect(out).toContain("Index             95");
     expect(out).toContain("Band              excellent");
+  });
+});
+
+/**
+ * Schema 1.6.0 network attribution. Both rows are server-owned facts: the CLI prints them only
+ * when the server sent a value, and never infers a domain from the ASN/organization or computes
+ * a range itself.
+ */
+describe("Network Domain and Network Range rows", () => {
+  it("shows Domain and Network Range when the server sent them", () => {
+    const out = render(response({ domain: "google.com", range: "8.8.8.0/24" }));
+
+    expect(out).toContain("Domain            google.com");
+    expect(out).toContain("Network Range     8.8.8.0/24");
+  });
+
+  it("places them after Organization, keeping the existing Network order", () => {
+    const out = render(response({ domain: "google.com", range: "8.8.8.0/24" }));
+    const order = ["Type", "Connection", "ASN", "Organization", "Domain", "Network Range"];
+
+    const positions = order.map((label) => out.indexOf(`\n${label.padEnd(18)}`));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    expect(positions.every((p) => p >= 0)).toBe(true);
+  });
+
+  it("passes an IPv6 range through verbatim", () => {
+    const out = render(response({ domain: "google.com", range: "2001:4860:4840::/42" }));
+
+    expect(out).toContain("Network Range     2001:4860:4840::/42");
+  });
+
+  it("omits a row whose value is null or empty rather than printing N/A", () => {
+    const out = render(response({ domain: null, range: "" }));
+
+    expect(out).not.toContain("Domain");
+    expect(out).not.toContain("Network Range");
+    expect(out).not.toContain("undefined");
+  });
+
+  /**
+   * The counter-case: an ordinary Apple address is Apple, but the server sent no domain or range.
+   * If either row appears here, something upstream has started guessing from the ASN or the
+   * organization name - exactly what the schema forbids.
+   */
+  it("never infers a domain or range from the ASN or organization", () => {
+    const out = render(response());
+
+    expect(out).toContain("ASN               AS714");
+    expect(out).toContain("Organization      Apple Inc.");
+    expect(out).not.toContain("Domain");
+    expect(out).not.toContain("Network Range");
+    expect(out).not.toContain("apple.com");
+  });
+
+  /** Older servers predate both keys; reading them must not throw or print "undefined". */
+  it("tolerates a response from a server that predates the fields", () => {
+    const legacy = response({ domain: "google.com", range: "8.8.8.0/24" });
+    delete (legacy.network as Record<string, unknown>).domain;
+    delete (legacy.network as Record<string, unknown>).range;
+
+    const out = render(legacy);
+
+    expect(out).not.toContain("Domain");
+    expect(out).not.toContain("Network Range");
+    expect(out).not.toContain("undefined");
+    expect(out).toContain("Organization      Apple Inc.");
+  });
+
+  it("leaves the Profile and Service rows unchanged", () => {
+    const out = render(
+      response({
+        profile: "search_crawler",
+        service: "Googlebot",
+        domain: "google.com",
+        range: "66.249.66.0/24",
+      }),
+    );
+
+    expect(out).toContain("Profile           search_crawler");
+    expect(out).toContain("Service           Googlebot");
+    expect(out.indexOf("Service")).toBeLessThan(out.indexOf("Connection"));
+    expect(out).toContain("Domain            google.com");
+  });
+});
+
+/** Schema 1.6.0 geolocation completeness: continent, postal code and the approximate coordinate pair. */
+describe("Location completeness fields", () => {
+  const fullGeo: Partial<IpLocation> = {
+    regionCode: "IL",
+    region: "Illinois",
+    city: "Chicago",
+    timeZone: "America/Chicago",
+    continentCode: "NA",
+    continent: "North America",
+    postalCode: "60666",
+    latitude: 41.8781,
+    longitude: -87.6298,
+  };
+
+  it("shows continent, postal code and coordinates with the existing rows", () => {
+    const out = render(located(fullGeo));
+
+    expect(out).toContain("Country           United States (US)");
+    expect(out).toContain("Region            Illinois (IL)");
+    expect(out).toContain("City              Chicago");
+    expect(out).toContain("Continent         North America (NA)");
+    expect(out).toContain("Postal Code       60666");
+    expect(out).toContain("Coordinates       41.8781, -87.6298");
+    expect(out).toContain("Time Zone         America/Chicago");
+  });
+
+  it("orders the rows Country, Region, City, Continent, Postal Code, Coordinates, Time Zone", () => {
+    const out = render(located(fullGeo));
+    const order = [
+      "Country",
+      "Region",
+      "City",
+      "Continent",
+      "Postal Code",
+      "Coordinates",
+      "Time Zone",
+    ];
+
+    const positions = order.map((label) => out.indexOf(`\n${label.padEnd(18)}`));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    expect(positions.every((p) => p >= 0)).toBe(true);
+  });
+
+  /** Continent reuses the name/code rule: whichever half the server sent is what renders. */
+  it("falls back to whichever half of the continent pair the server sent", () => {
+    const nameOnly = render(located({ ...fullGeo, continentCode: null }));
+    expect(nameOnly).toContain("Continent         North America");
+
+    const codeOnly = render(located({ ...fullGeo, continent: null }));
+    expect(codeOnly).toContain("Continent         NA");
+
+    const neither = render(located({ ...fullGeo, continent: null, continentCode: null }));
+    expect(neither).not.toContain("Continent");
+  });
+
+  /** The postal code is a source string, printed verbatim - leading zeros and spaces survive. */
+  it("prints the postal code exactly as sent", () => {
+    expect(render(located({ ...fullGeo, postalCode: "01234" }))).toContain(
+      "Postal Code       01234",
+    );
+    expect(render(located({ ...fullGeo, postalCode: "SW1A 1AA" }))).toContain(
+      "Postal Code       SW1A 1AA",
+    );
+  });
+
+  it("omits Postal Code for null or empty rather than printing a placeholder", () => {
+    for (const postalCode of [null, ""]) {
+      const out = render(located({ ...fullGeo, postalCode }));
+      expect(out).not.toContain("Postal Code");
+    }
+  });
+
+  /** (0, 0) is a real position - a truthiness check would drop the row on a legitimate answer. */
+  it("renders a zero coordinate pair as 0, 0", () => {
+    const out = render(located({ ...fullGeo, latitude: 0, longitude: 0 }));
+
+    expect(out).toContain("Coordinates       0, 0");
+  });
+
+  /** An anycast network has no single node position: null coordinates must not become a fake fix. */
+  it("shows no coordinates or postal code for an anycast null pair", () => {
+    const out = render(
+      located({ ...fullGeo, city: null, postalCode: null, latitude: null, longitude: null }),
+    );
+
+    expect(out).toContain("Continent         North America (NA)");
+    expect(out).not.toContain("Coordinates");
+    expect(out).not.toContain("Postal Code");
+    expect(out).not.toContain("NaN");
+    expect(out).not.toContain("null");
+    expect(out).not.toContain("undefined");
+  });
+
+  /** The pair is all-or-nothing: one valid half alone is not a position. */
+  it("shows no coordinates when only one half of the pair is a number", () => {
+    const latOnly = render(located({ ...fullGeo, longitude: null }));
+    expect(latOnly).not.toContain("Coordinates");
+
+    const lonOnly = render(located({ ...fullGeo, latitude: null }));
+    expect(lonOnly).not.toContain("Coordinates");
+
+    const missing = render(located({ ...fullGeo, latitude: undefined, longitude: undefined }));
+    expect(missing).not.toContain("Coordinates");
+  });
+
+  /** An older server sends only the original six fields; the block must render exactly as before. */
+  it("renders a legacy location unchanged, with no new rows", () => {
+    const out = render(located());
+
+    expect(out).toContain("Country           United States (US)");
+    expect(out).toContain("City              Los Angeles");
+    expect(out).toContain("Time Zone         America/Los_Angeles");
+    expect(out).not.toContain("Continent");
+    expect(out).not.toContain("Postal Code");
+    expect(out).not.toContain("Coordinates");
+    expect(out).not.toContain("undefined");
+  });
+
+  it("shows no Location section when every field, old and new, came back null", () => {
+    const out = render(
+      located({
+        countryCode: null,
+        country: null,
+        regionCode: null,
+        region: null,
+        city: null,
+        timeZone: null,
+        continentCode: null,
+        continent: null,
+        postalCode: null,
+        latitude: null,
+        longitude: null,
+      }),
+    );
+
+    expect(out).not.toContain("Location");
+  });
+
+  it("shows no Location section for a null location even when the network has domain and range", () => {
+    const out = render({
+      ...response({ domain: "google.com", range: "8.8.8.0/24" }),
+      location: null,
+    });
+
+    expect(out).not.toContain("Location");
+    expect(out).toContain("Domain            google.com");
+    expect(out).toContain("Network Range     8.8.8.0/24");
+  });
+
+  /** The additions are display-only: every pre-existing section must render exactly as before. */
+  it("leaves Profile, Service, Risk Reasons, Signals and Identity untouched", () => {
+    const base = response(
+      {
+        profile: "search_crawler",
+        service: "Googlebot",
+        domain: "google.com",
+        range: "66.249.66.0/24",
+      },
+      undefined,
+      { searchCrawler: true, searchCrawlerName: "Googlebot" },
+    );
+    const out = render({
+      ...base,
+      risk: {
+        ...base.risk,
+        reasons: [{ code: "VERIFIED_SEARCH_CRAWLER", category: "identity", severity: "info" }],
+      },
+      location: {
+        countryCode: "US",
+        country: "United States",
+        regionCode: "CA",
+        region: "California",
+        city: "Mountain View",
+        timeZone: "America/Los_Angeles",
+        continentCode: "NA",
+        continent: "North America",
+        postalCode: "94043",
+        latitude: 37.422,
+        longitude: -122.084,
+      },
+    });
+
+    expect(out).toContain("Profile           search_crawler");
+    expect(out).toContain("Service           Googlebot");
+    expect(out).toContain("Verified Search Crawler");
+    expect(out).toContain("Proxy             No");
+    expect(out).toContain("Datacenter        Unknown");
+    expect(out).toContain("Search Crawler    Yes");
+    expect(out).toContain("Crawler           Googlebot");
+    expect(out).toContain("Coordinates       37.422, -122.084");
   });
 });
