@@ -95,7 +95,8 @@ describe("printAnonymousLimitError", () => {
     const out = strip(captureStderr(() => printAnonymousLimitError(limitError())));
 
     expect(out).toContain("Available         0");
-    expect(out).toContain("https://www.netriskscan.com/developers");
+    expect(out).toContain("https://www.netriskscan.com/developer/register");
+    expect(out).not.toContain("https://www.netriskscan.com/developers");
     expect(out).not.toContain("Daily Limit");
     expect(out).not.toContain("Reset");
     expect(out).not.toContain("undefined");

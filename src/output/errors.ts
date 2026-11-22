@@ -7,7 +7,7 @@ import type {
 import { formatNumber, formatUtcTimestamp, row } from "./format.js";
 
 /** Used only when the server did not send its own `signupUrl`. */
-const SIGNUP_URL = "https://www.netriskscan.com/developers";
+const SIGNUP_URL = "https://www.netriskscan.com/developer/register";
 
 export function printConfigError(err: NetRiskScanConfigError): void {
   process.stderr.write(`Error: ${err.message}\n`);
