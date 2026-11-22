@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/TeamQQ/netriskscan-cli/compare/v1.6.0...v1.6.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* link anonymous quota errors to developer registration ([d294e82](https://github.com/TeamQQ/netriskscan-cli/commit/d294e82d60dc7f2c17444ac5a2755bd637dcaf49))
+
 # [1.6.0](https://github.com/TeamQQ/netriskscan-cli/compare/v1.5.0...v1.6.0) (2026-11-17)
 
 
