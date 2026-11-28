@@ -1,73 +1,189 @@
 # NetRiskScan CLI
 
-Command-line client and TypeScript SDK for [NetRiskScan](https://www.netriskscan.com) —
-an IP lookup CLI for IP reputation, IP risk, proxy/VPN/Tor and datacenter detection, and
-network intelligence (ASN, organization, verified search-crawler identity), usable as a
-command line IP lookup from your terminal or the Developer API.
+**IP intelligence for products, infrastructure, and security automation.**
+
+`netriskscan-cli` is the official command-line interface and typed TypeScript client for the [NetRiskScan Developer API](https://www.netriskscan.com/developers). It helps engineering teams inspect IP addresses, enrich network context, evaluate reputation signals, and bring IP intelligence into existing applications and automated workflows.
+
+Use the CLI for investigations and operational tasks. Use the TypeScript client or Developer API to integrate the same server-side assessment into your own product.
 
 [![CI](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/TeamQQ/netriskscan-cli/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/netriskscan-cli.svg)](https://www.npmjs.com/package/netriskscan-cli)
 [![Website](https://img.shields.io/badge/website-netriskscan.com-informational)](https://www.netriskscan.com)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Website](https://www.netriskscan.com) · [npm](https://www.npmjs.com/package/netriskscan-cli) · [Developer API](#developer-api) · [Official resources](#official-resources)
-
 <p align="center">
-  <img src="./demo/netriskscan-demo.gif" alt="netriskscan-cli check 17.241.200.160 in a terminal, showing IP, Index, Band, Network Type, Profile, Service, ASN, Organization, Proxy/VPN/Tor signals and verified Search Crawler identity" width="700" />
+  <a href="https://www.netriskscan.com/developers"><strong>Developer API &amp; plans</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://www.npmjs.com/package/netriskscan-cli">npm package</a>
+  &nbsp;·&nbsp;
+  <a href="https://www.netriskscan.com/methodology.html">Scoring methodology</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/TeamQQ/netriskscan-cli/issues">Support</a>
 </p>
 
+<p align="center">
+  <img src="./demo/netriskscan-demo.gif" alt="Live terminal demonstration of netriskscan-cli checking an IP and displaying its NetRiskScan Index, network details, location, and risk signals" width="760" />
+</p>
+
+## Product overview
+
+NetRiskScan turns an IP address into structured network intelligence through one Developer API. The CLI is the fastest way to evaluate the service from a terminal; the bundled TypeScript client provides a direct integration path for Node.js applications.
+
+The CLI does not calculate a separate score or invent classifications locally. Risk assessment, signal evaluation, and enrichment are performed by the NetRiskScan API. The client presents the server response in human-readable or machine-readable form.
+
+**Important score semantics:** the NetRiskScan Index is a cleanliness-oriented score. A higher Index means a cleaner address; it is not a threat score.
+
+## Use cases
+
+NetRiskScan can provide IP intelligence as an input to existing product and security workflows:
+
+- **Account and transaction risk workflows** — enrich signup, login, checkout, and account-review events with proxy, VPN, Tor, datacenter, scanner, and abuse signals.
+- **Traffic classification** — distinguish network and anonymity characteristics when evaluating incoming connections.
+- **Infrastructure validation** — review VPS, hosting, and IP-pool reputation before deployment, migration, or provider changes.
+- **Security operations** — add network attribution and server-returned risk reasons to incident triage, support investigations, and log analysis.
+- **Automation and CI/CD** — screen IP lists, consume JSON/JSONL output, and apply explicit policy gates with stable exit codes.
+
+NetRiskScan provides diagnostic network intelligence, not a complete fraud engine or an automatic verdict. Combine its signals with your own application context and decision policies.
+
+## Intelligence returned
+
+The Developer API provides a normalized assessment and supporting network context:
+
+| Data | What it provides |
+| --- | --- |
+| **NetRiskScan Index & band** | A normalized IP cleanliness assessment. Higher is cleaner. |
+| **Independent signals** | Proxy, VPN, Tor, datacenter, scanner, and abuse flags. Each signal preserves `true`, `false`, or `null` (unknown). |
+| **Network attribution** | Network type, profile, service, ASN, organization, operator domain, and containing CIDR range when resolved. |
+| **IP geolocation** | Network-level country, region, city, continent, postal code, approximate coordinates, and time zone when available. |
+| **Verified identity** | Known search-crawler identity, such as Googlebot, Bingbot, or Applebot, when verified by the API. |
+| **Risk reasons** | Server-generated reason codes with category and severity. Reasons can describe positive infrastructure evidence as well as risk signals. |
+
+Fields are returned only when the API can resolve them. Unknown or unavailable values are not silently converted into negative signals.
+
+## Quick start
+
+Run a real IP lookup without installing the package globally:
+
 ```bash
-npx netriskscan-cli check 17.241.200.160
+npx netriskscan-cli check 1.1.1.1
 ```
 
-**No signup. No API key. No configuration required.** The command above runs on a clean
-machine and returns a real result from the live API, metered by an anonymous daily
-allowance (currently 30 checks per public IP per UTC day - see
-[Anonymous trial](#anonymous-trial)). Add a free [API key](#getting-an-api-key) for more.
+The command uses the anonymous evaluation allowance when no API key is configured. For sustained usage, account-level quota, and production integrations, configure a Developer API key.
 
-The values shown above and in the recording come from the live API and change as
-reputation and threat data changes - see [IP risk check](#ip-risk-check) for a
-field-by-field reference.
+## Installation
 
-## Why NetRiskScan?
+Requires **Node.js 20 or later**.
 
-- Known infrastructure identification for services such as search crawlers and public
-  infrastructure, instead of treating every address as a generic business or datacenter IP
-- Proxy, VPN, Tor, abuse, blacklist and threat signals
-- Network-level IP geolocation (country, region, city, continent, postal code,
-  approximate coordinates, time zone)
-- Network attribution: the operator's primary domain and the CIDR range containing the
-  address (IP Intelligence Schema 1.6.0)
-- Public risk reasons: the server's own explanation of _why_ an address scored as it did
-- One normalized NetRiskScan Index instead of raw provider scores - higher is cleaner
-- `unknown` and `not applicable` states are preserved, never collapsed into "false"
-- Anonymous daily trial: run your first check with no account, no key, no configuration
-- Human-readable CLI output plus JSON / JSONL for scripts, batches and CI
+Run on demand with `npx`:
 
-NetRiskScan can identify known infrastructure such as search crawlers, public DNS
-resolvers and other published infrastructure, instead of treating every address as a
-generic business or datacenter IP. Known infrastructure does not automatically mean
-safe - proxy, VPN, Tor, abuse and threat signals are still evaluated separately on
-every address. NetRiskScan normalizes multiple categories of evidence into one
-consistent assessment rather than exposing a single provider's raw score.
+```bash
+npx netriskscan-cli check 1.1.1.1
+```
 
-> NetRiskScan provides diagnostic network intelligence. Results should not be treated as
-> proof of malicious activity and should not be used as the sole basis for legal,
-> employment, credit, identity, or other high-impact decisions.
+Or install globally:
 
-Powered by the [NetRiskScan Developer API](#developer-api).
+```bash
+npm install -g netriskscan-cli
+netriskscan check 1.1.1.1
+```
+
+The installed executable is `netriskscan`; the npm package name is `netriskscan-cli`.
+
+## Access model
+
+Choose the access mode that matches the workload:
+
+| Access mode | Best for | How it works |
+| --- | --- | --- |
+| **Anonymous evaluation** | First lookups and quick CLI tests | `check` and `batch` can run without an API key. Requests are metered by the caller's public IP and subject to a daily allowance. |
+| **Developer API key** | Application integration and account-level usage | Key-authenticated requests use the Developer Account's plan quota. The `usage` command requires a key. |
+| **Paid plan** | Sustained production traffic and higher-volume workloads | Select a plan based on required quota, request rate, and concurrency. Current limits and pricing are shown in the Developer Dashboard. |
+
+A Developer account includes a Free Plan for evaluation. For production workloads, use a plan that matches your expected traffic and operational requirements. Plan allowances, rate limits, and concurrency can change; the Developer Dashboard is the source of truth.
+
+[Explore Developer API access and plans](https://www.netriskscan.com/developers).
+
+## Anonymous trial
+
+The `check` and `batch` commands can be used without credentials. When no API key is configured, the CLI sends **no** `Authorization` header and the Developer API serves the request through an anonymous daily trial, metered by the caller's public IP.
+
+The current default allowance is **30 requests per public IP per UTC day**. The allowance reported by the API response is authoritative; the CLI does not maintain a local counter or estimate remaining requests.
+
+Use an API key when you need account-level quota, sustained usage, or billing-period usage reporting. Anonymous trial exhaustion returns `429 anonymous_daily_limit_reached`; this deterministic response is not automatically retried.
+
+| Command | API key |
+| --- | --- |
+| `netriskscan check` | Optional — anonymous trial is used when omitted |
+| `netriskscan batch` | Optional — anonymous trial is used when omitted |
+| `netriskscan usage` | Required — retrieves Developer Account plan and billing-period usage |
+
+A configured but invalid or disabled key is never silently downgraded to anonymous access.
+
+## Getting an API key
+
+Use a Developer API key for application integration, account-level quota, and usage reporting:
+
+1. Create a [NetRiskScan Developer account](https://www.netriskscan.com/developers) and open the Developer Dashboard.
+2. Go to **API Keys** and create a key with the scopes required by your integration:
+   - `ip-risk:read` — IP risk and network intelligence lookups.
+   - `usage:read` — account usage reporting.
+3. Copy the full key when it is created. It is shown in full only once.
+
+Set the key as an environment variable instead of putting it directly in a command, source file, or shell history:
+
+```bash
+export NETRISKSCAN_API_KEY="nrs_live_xxx"
+```
+
+Then run authenticated lookups and inspect account usage:
+
+```bash
+netriskscan check 1.1.1.1 --verbose
+netriskscan usage
+```
+
+Current plan quotas, billing-period allowances, request-rate limits, concurrency limits, and pricing are maintained in the Developer Dashboard rather than hard-coded in this README.
+
+## CLI and TypeScript integration
+
+Use the command-line interface for manual checks, operational scripts, batch screening, and CI/CD. For Node.js or TypeScript applications, the same npm package exports `NetRiskScanClient` and typed response/error definitions.
+
+Install it as an application dependency:
+
+```bash
+npm install netriskscan-cli
+```
+
+Minimal integration:
+
+```ts
+import { NetRiskScanClient } from "netriskscan-cli";
+
+const client = new NetRiskScanClient({
+  apiKey: process.env.NETRISKSCAN_API_KEY,
+});
+
+const { data } = await client.checkIp("1.1.1.1");
+
+console.log("NetRiskScan Index:", data.risk.index);
+console.log("Proxy:", data.flags.proxy);
+console.log("VPN:", data.flags.vpn);
+console.log("Network:", data.network.organization);
+```
+
+The SDK preserves the API's response semantics, including nullable signals and optional enrichment fields. It does not reproduce the scoring model locally.
 
 ## Table of contents
 
-- [Why NetRiskScan?](#why-netriskscan)
-- [Introduction](#introduction)
-- [IP Lookup and Reputation](#ip-lookup-and-reputation)
-- [Features](#features)
-- [Use Cases](#use-cases)
+- [Product overview](#product-overview)
+- [Use cases](#use-cases)
+- [Intelligence returned](#intelligence-returned)
+- [Quick start](#quick-start)
 - [Installation](#installation)
+- [Access model](#access-model)
 - [Anonymous trial](#anonymous-trial)
 - [Getting an API key](#getting-an-api-key)
-- [Quick start](#quick-start)
+- [CLI and TypeScript integration](#cli-and-typescript-integration)
 - [IP risk check](#ip-risk-check)
 - [Usage & quota](#usage--quota)
 - [Batch processing](#batch-processing)
@@ -85,183 +201,6 @@ Powered by the [NetRiskScan Developer API](#developer-api).
 - [Official resources](#official-resources)
 - [Contributing](#contributing)
 - [License](#license)
-
-## Introduction
-
-`netriskscan-cli` is the official command-line client and thin TypeScript SDK for
-[NetRiskScan](https://www.netriskscan.com), an IP reputation and network intelligence
-service.
-
-It connects to the NetRiskScan Developer API and returns machine-readable IP reputation
-scores, network attribution, and risk signals. Give it an IP address, get back a result
-you can pipe, gate on, or store.
-
-This is a read-only diagnostic tool. It does not make decisions for you, and the CLI
-never recomputes or approximates a risk score client-side - the `risk.index` returned by
-the server is always the single source of truth.
-
-**A higher NetRiskScan Index means a cleaner address, not a riskier one.** `95` is
-`excellent`; `42` is `poor`. It is a cleanliness score, not a threat score - never read
-`90` as "high risk".
-
-## IP Lookup and Reputation
-
-Use `netriskscan check` as a command-line IP lookup and reputation tool: give it an
-IPv4 or IPv6 address and get back the NetRiskScan Index, ASN, organization, network
-type and security signals in one call. It doubles as an IP risk checker CLI and IP
-reputation checker CLI with no account or API key at all, via the
-[anonymous trial](#anonymous-trial) - see [IP risk check](#ip-risk-check) for the full
-field reference.
-
-## Features
-
-- `check` and `batch` with no API key at all, via the anonymous daily trial
-- `check`, `usage`, and client-side `batch` commands
-- IPv4 and IPv6 support
-- Proxy type classification (residential, ISP, mobile, datacenter) for detected proxies,
-  and verified search crawler identity (Googlebot, Bingbot, Applebot, ...)
-- IP geolocation (country, region, city, continent, postal code, approximate
-  coordinates) and server-generated risk reasons in `check`, `--json` and `--jsonl`
-- Network owner domain and CIDR range (IP Intelligence Schema 1.6.0 - purely additive,
-  older servers still fully supported)
-- Human-readable terminal output, `--json`, and `--jsonl` (batch) modes
-- Correct three-state handling of risk flags (`true` / `false` / `null` - never coerced)
-- CI-friendly exit codes and `--fail-below` / `--fail-on` policy gates
-- Automatic retry with backoff on `429` / `503`, respecting `Retry-After`
-- Rate limit and quota visibility via `--verbose`
-- Zero telemetry
-- A typed `NetRiskScanClient` SDK you can import directly in Node.js/TypeScript
-
-## Use Cases
-
-- Manual investigation of a suspicious IP during an incident or support ticket
-- Checking a new VPS or server's IP reputation before deployment or DNS cutover - a
-  quick VPS IP reputation checker for ops and security teams
-- Screening proxy, VPN and Tor traffic in login, checkout or signup flows
-- Running a bulk IP reputation checker over log exports or CIDR-derived IP lists with
-  `batch`
-- Gating a CI/CD pipeline or deploy job on `--fail-below` / `--fail-on` before trusting
-  an IP
-- One step in an OSINT IP lookup workflow alongside other tools - NetRiskScan reports
-  network intelligence signals, not a full OSINT investigation platform
-- Piping `--json` / `--jsonl` output into shell scripts, SIEM ingestion or log pipelines
-
-## Installation
-
-Run it without installing anything - a zero-setup terminal IP lookup:
-
-```bash
-npx netriskscan-cli check 1.1.1.1
-```
-
-Or install it globally:
-
-```bash
-npm install -g netriskscan-cli
-netriskscan check 1.1.1.1
-```
-
-Requires Node.js >= 20.
-
-## Anonymous trial
-
-`check` and `batch` work without any credentials. When no API key is configured, the CLI
-sends **no** `Authorization` header at all, and the Developer API serves the request from
-an anonymous daily trial metered by the caller's public IP (currently 30 requests per
-public IP per UTC day - the allowance reported in the response is always the authority,
-not this number).
-
-```bash
-npx netriskscan-cli check 8.8.8.8
-```
-
-Every anonymous response reports where you stand, and the CLI prints it verbatim:
-
-```text
-Usage
-Available         29
-Daily Limit       30
-Reset             2026-08-29 00:00 UTC
-```
-
-`Available` is `usage.remaining` exactly as returned. The CLI keeps no local counter and
-never recomputes it from `dailyLimit - used`.
-
-When the day's allowance is spent, the next request returns
-`429 anonymous_daily_limit_reached` and the CLI exits `5` with:
-
-```text
-NetRiskScan
-
-Anonymous daily trial limit reached.
-
-Usage
-Available         0
-Daily Limit       30
-Reset             2026-08-29 00:00 UTC
-
-Get more queries
-https://www.netriskscan.com/developers
-```
-
-That response is deterministic until the reset, so it is **never** retried automatically.
-
-Which commands need a key:
-
-| Command             | API key                                                         |
-| ------------------- | --------------------------------------------------------------- |
-| `netriskscan check` | Optional - anonymous trial when omitted                         |
-| `netriskscan batch` | Optional - anonymous trial when omitted                         |
-| `netriskscan usage` | **Required** - reports Developer Account plan and billing quota |
-
-A key that the server rejects is never downgraded to an anonymous request: a configured
-key that fails returns `401 invalid_api_key` and exit code `3`. The access mode is decided
-purely by whether a key is present.
-
-## Getting an API key
-
-The anonymous trial does not require an API key. Create one when you need:
-
-- more requests than the daily trial allows
-- account quota instead of a per-IP allowance
-- billing-period usage reporting (`netriskscan usage`)
-- a production integration
-
-1. Create a NetRiskScan Developer account and open the **Developer Dashboard**.
-2. Go to **API Keys** and create one, selecting the scopes you need
-   (`ip-risk:read`, `usage:read`).
-3. Copy the full key immediately - it is shown in full only once, right after creation.
-
-A NetRiskScan Developer account includes a **Free Plan** (no credit card required), so
-you can try the real API with real data before committing to a paid plan. Current
-pricing, rate limits, quotas, and concurrency limits are shown on the Developer
-Dashboard's **Pricing** and **Usage** pages and are not duplicated here, since they
-change over time.
-
-Store your key in an environment variable rather than typing it inline (inline values
-can end up in your shell history):
-
-```bash
-export NETRISKSCAN_API_KEY="nrs_live_xxx"
-```
-
-## Quick start
-
-```bash
-npx netriskscan-cli check 1.1.1.1
-```
-
-No setup required - no account, no key, no configuration file.
-
-With an API key, for higher volume, account quota and `usage`:
-
-```bash
-export NETRISKSCAN_API_KEY="nrs_live_xxx"
-
-netriskscan check 1.1.1.1
-netriskscan usage
-netriskscan batch ips.txt --jsonl > results.jsonl
-```
 
 ## IP risk check
 
@@ -847,9 +786,8 @@ Request ID    req_xxxxxxxx
 
 ## SDK usage
 
-The API client is a standalone module, independent of the CLI layer, so it can be used
-directly from Node.js/TypeScript and will move to `@netriskscan/sdk` in a future release
-without changing its shape:
+The package also exports `NetRiskScanClient` and its response and error types for direct
+Node.js/TypeScript integration. The CLI and SDK use the same API client and response contract:
 
 The client needs no configuration at all. Without an API key it sends no `Authorization`
 header and uses the anonymous trial:
