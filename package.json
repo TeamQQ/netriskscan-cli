@@ -1,6 +1,6 @@
 {
   "name": "netriskscan-cli",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Official NetRiskScan CLI and TypeScript client for IP reputation, proxy/VPN/Tor signals, datacenter detection, and network intelligence via the Developer API.",
   "keywords": [
     "netriskscan",

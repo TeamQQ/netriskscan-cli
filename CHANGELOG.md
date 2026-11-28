@@ -1,3 +1,10 @@
+## [1.6.2](https://github.com/TeamQQ/netriskscan-cli/compare/v1.6.1...v1.6.2) (2026-11-28)
+
+
+### Bug Fixes
+
+* **readme:** route Developer API links to the correct pages ([17cafb8](https://github.com/TeamQQ/netriskscan-cli/commit/17cafb86940729fc2d2d01fb4919cae1ff4d89ff))
+
 ## [1.6.1](https://github.com/TeamQQ/netriskscan-cli/compare/v1.6.0...v1.6.1) (2026-11-22)
 
 
