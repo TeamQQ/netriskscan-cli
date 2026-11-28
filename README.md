@@ -22,7 +22,23 @@ Use the CLI for investigations and operational tasks. Use the TypeScript client 
 </p>
 
 <p align="center">
-  <img src="./demo/netriskscan-demo.gif" alt="Live terminal demonstration of netriskscan-cli checking an IP and displaying its NetRiskScan Index, network details, location, and risk signals" width="760" />
+  <img src="https://raw.githubusercontent.com/TeamQQ/netriskscan-cli/main/assets/netriskscan-cli-social-preview.png" alt="NetRiskScan CLI — IP Risk Intelligence for Developers" width="760" />
+</p>
+
+## Quick start
+
+Run a real IP lookup without installing the package globally.
+
+```bash
+npx netriskscan-cli check 1.1.1.1
+```
+
+The command uses the anonymous evaluation allowance when no API key is configured. For sustained usage, account-level quota, and production integrations, configure a Developer API key.
+
+### See it in action
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/TeamQQ/netriskscan-cli/main/demo/netriskscan-demo.gif" alt="Live terminal demonstration of netriskscan-cli checking an IP and displaying its NetRiskScan Index, network details, location, and risk signals" width="700" />
 </p>
 
 ## Product overview
@@ -59,16 +75,6 @@ The Developer API provides a normalized assessment and supporting network contex
 | **Risk reasons** | Server-generated reason codes with category and severity. Reasons can describe positive infrastructure evidence as well as risk signals. |
 
 Fields are returned only when the API can resolve them. Unknown or unavailable values are not silently converted into negative signals.
-
-## Quick start
-
-Run a real IP lookup without installing the package globally:
-
-```bash
-npx netriskscan-cli check 1.1.1.1
-```
-
-The command uses the anonymous evaluation allowance when no API key is configured. For sustained usage, account-level quota, and production integrations, configure a Developer API key.
 
 ## Installation
 
@@ -175,10 +181,10 @@ The SDK preserves the API's response semantics, including nullable signals and o
 
 ## Table of contents
 
+- [Quick start](#quick-start)
 - [Product overview](#product-overview)
 - [Use cases](#use-cases)
 - [Intelligence returned](#intelligence-returned)
-- [Quick start](#quick-start)
 - [Installation](#installation)
 - [Access model](#access-model)
 - [Anonymous trial](#anonymous-trial)
