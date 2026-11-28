@@ -2,7 +2,7 @@
 
 **IP intelligence for products, infrastructure, and security automation.**
 
-`netriskscan-cli` is the official command-line interface and typed TypeScript client for the [NetRiskScan Developer API](https://www.netriskscan.com/developers). It helps engineering teams inspect IP addresses, enrich network context, evaluate reputation signals, and bring IP intelligence into existing applications and automated workflows.
+`netriskscan-cli` is the official command-line interface and typed TypeScript client for the [NetRiskScan Developer API](https://www.netriskscan.com/developer/docs). It helps engineering teams inspect IP addresses, enrich network context, evaluate reputation signals, and bring IP intelligence into existing applications and automated workflows.
 
 Use the CLI for investigations and operational tasks. Use the TypeScript client or Developer API to integrate the same server-side assessment into your own product.
 
@@ -12,7 +12,7 @@ Use the CLI for investigations and operational tasks. Use the TypeScript client 
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 <p align="center">
-  <a href="https://www.netriskscan.com/developers"><strong>Developer API &amp; plans</strong></a>
+  <a href="https://www.netriskscan.com/pricing.html"><strong>Developer API &amp; plans</strong></a>
   &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/netriskscan-cli">npm package</a>
   &nbsp;·&nbsp;
@@ -107,7 +107,7 @@ Choose the access mode that matches the workload:
 
 A Developer account includes a Free Plan for evaluation. For production workloads, use a plan that matches your expected traffic and operational requirements. Plan allowances, rate limits, and concurrency can change; the Developer Dashboard is the source of truth.
 
-[Explore Developer API access and plans](https://www.netriskscan.com/developers).
+[Explore Developer API access and plans](https://www.netriskscan.com/pricing.html).
 
 ## Anonymous trial
 
@@ -129,7 +129,7 @@ A configured but invalid or disabled key is never silently downgraded to anonymo
 
 Use a Developer API key for application integration, account-level quota, and usage reporting:
 
-1. Create a [NetRiskScan Developer account](https://www.netriskscan.com/developers) and open the Developer Dashboard.
+1. Create a [NetRiskScan Developer account](https://www.netriskscan.com/developer/register) and open the Developer Dashboard.
 2. Go to **API Keys** and create a key with the scopes required by your integration:
    - `ip-risk:read` — IP risk and network intelligence lookups.
    - `usage:read` — account usage reporting.
